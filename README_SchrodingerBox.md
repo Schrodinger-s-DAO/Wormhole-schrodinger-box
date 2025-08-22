@@ -14,6 +14,7 @@
 ```bash
 npx hardhat compile
 ```
+Assicurarsi di avere il .env con le informazioni base mostrate nel punto 2
 
 ### Deploy su Holesky
 
@@ -27,13 +28,7 @@ npx hardhat run scripts/deploy.js --network holesky
 npx hardhat run scripts/deploy.js --network sepolia
 ```
 
-Lo script di deploy deve includere:
-
-* SchrodingerBox (parametri: relayer della rete, chainId Wormhole e feeCollector)
-* ParadoxToken (ERC20 di test)
-* SchrodingerCatNFT (NFT di test)
-
-Gli indirizzi generati vanno salvati nel file `.env`.
+Gli indirizzi generati vanno salvati nel file `.env` per essere usato nei test.
 
 ### Configurazione Trusted Contracts
 
@@ -81,7 +76,7 @@ TEST_PRIVATE_KEY2=
 # Etherscan API key (per verifiche e deploy verificato)
 ETHERSCAN_API_KEY=YFJTEZB235381EXJYEVHIYX8S6Y4GDFWKQ
 
-# --- ADDRESSES ---
+# --- ADDRESSES --- Questa parte va compilata con gli indirizzi deployati nuovi
 
 # HOLESKY
 HOLESKY_SCHRODINGER_BOX_ADDRESS=0x4BC2a52fBD1f1807083A89BF7DCC248B443219d8
@@ -118,7 +113,7 @@ Copre:
 1. Esecuzione su Holesky:
 
    ```bash
-   npx hardhat test --network holesky test/FixedBridgeTest.js
+   npx hardhat test --network holesky test/test2.test.js
    ```
 
    La box viene bridgiata e bloccata.
@@ -126,7 +121,7 @@ Copre:
 2. Esecuzione su Sepolia:
 
    ```bash
-   npx hardhat test --network sepolia test/FixedBridgeTest.js
+   npx hardhat test --network sepolia test/test2.test.js
    ```
 
    Viene ricevuta una shadow box con stesso `boxId` e contenuti.
@@ -186,4 +181,4 @@ Causa: la box resta nello stato `locked` e non viene sbloccata. Occorre eseguire
   * Configurazione `.env` completa
   * Impostazione reciproca dei `trustedContracts`
 
-I test falliscono se uno di questi passaggi manca.
+I test falliscono anche se nessuno di questi passaggi manca.
