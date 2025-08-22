@@ -18,13 +18,13 @@ npx hardhat compile
 ### Deploy su Holesky
 
 ```bash
-npx hardhat run scripts/deployBox.js --network holesky
+npx hardhat run scripts/deploy.js --network holesky
 ```
 
 ### Deploy su Sepolia
 
 ```bash
-npx hardhat run scripts/deployBox.js --network sepolia
+npx hardhat run scripts/deploy.js --network sepolia
 ```
 
 Lo script di deploy deve includere:
