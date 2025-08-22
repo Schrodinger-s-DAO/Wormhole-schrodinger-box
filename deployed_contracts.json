@@ -1,0 +1,18 @@
+{
+    "holesky": {
+      "contracts": {
+        "SchrodingerBox": "0xE3c0C995fdC9C8B53383adB95f7816d4b3d657f5",
+        "FeeCollector": "0x7368A8DA33cad6Db111686A130687f64E4df39c7",
+        "ParadoxToken": "0xC23Cc5B5a56325b78A998678C3aB3b4cf299E0DC",
+        "SchrodingerCatNFT": "0x463aA9fa9CC882306b81440cf16845170Fc1b843"
+      }
+    },
+    "sepolia": {
+      "contracts": {
+        "SchrodingerBox": "0xc858b43357b6D8D507ad8E069847b5CFb0181a71",
+        "FeeCollector": "0x25305962f8EE3e349F79387695693f50b0f4BAA1",
+        "ParadoxToken": "0x84E17681cb4A5A8f89BF068a61594FF8699577c7",
+        "SchrodingerCatNFT": "0x0A9902718f5b0fA61E390746F3d2490211712Fed"
+      }
+    }
+  }

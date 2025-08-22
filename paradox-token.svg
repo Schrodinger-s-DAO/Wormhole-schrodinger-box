@@ -1,0 +1,78 @@
+<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Definizioni di gradienti e filtri -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4a0094" />
+      <stop offset="100%" stop-color="#2a0055" />
+    </linearGradient>
+    
+    <linearGradient id="pinkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff55aa" />
+      <stop offset="100%" stop-color="#ff007a" />
+    </linearGradient>
+    
+    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#55a9ff" />
+      <stop offset="100%" stop-color="#007aff" />
+    </linearGradient>
+    
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8" />
+      <feOffset dx="0" dy="4" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    
+    <filter id="innerGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="blur" />
+      <feComposite in="blur" in2="SourceAlpha" operator="out" result="glow" />
+      <feFlood flood-color="#ffffff" flood-opacity="0.3" result="coloredGlow" />
+      <feComposite in="coloredGlow" in2="glow" operator="in" result="finalGlow" />
+      <feComposite in="finalGlow" in2="SourceGraphic" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Background circolare -->
+  <circle cx="250" cy="250" r="240" fill="url(#bgGradient)" />
+  
+  <!-- Bordo esterno luminoso -->
+  <circle cx="250" cy="250" r="230" fill="none" stroke="#8a55e8" stroke-width="5" opacity="0.8" />
+  
+  <!-- Elementi principali del simbolo -->
+  <g transform="translate(250, 250)" filter="url(#softShadow)">
+    <!-- Anello esterno -->
+    <circle cx="0" cy="0" r="140" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="0.9" />
+    
+    <!-- Simbolo principale: dualità paradossale -->
+    <g>
+      <!-- Semicerchio rosa -->
+      <path d="M 0,-70 A 70,70 0 1,0 0,70 Z" fill="url(#pinkGradient)" opacity="0.9" />
+      
+      <!-- Semicerchio blu -->
+      <path d="M 0,-70 A 70,70 0 1,1 0,70 Z" fill="url(#blueGradient)" opacity="0.9" />
+      
+      <!-- Linea verticale di separazione -->
+      <line x1="0" y1="-100" x2="0" y2="100" stroke="#ffffff" stroke-width="5" />
+      
+      <!-- Cerchio centrale -->
+      <circle cx="0" cy="0" r="30" fill="#ffffff" opacity="0.8" />
+    </g>
+  </g>
+  
+  <!-- Elementi decorativi -->
+  <!-- Punti di luce -->
+  <circle cx="180" cy="170" r="4" fill="#ffffff" opacity="0.9" />
+  <circle cx="165" cy="155" r="2" fill="#ffffff" opacity="0.7" />
+  <circle cx="350" cy="180" r="3" fill="#ffffff" opacity="0.8" />
+  
+  <!-- Bordo sottile interno -->
+  <circle cx="250" cy="250" r="180" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.4" />
+  
+  <!-- Effetto luminosità generale -->
+  <circle cx="250" cy="250" r="180" fill="none" filter="url(#innerGlow)" />
+</svg>
