@@ -55,4 +55,4 @@ npx hardhat run scripts/deploy.js --network sepolia
 
 ## License & Credits
 
-- See repository LICENSE and original authors for attribution.
+- The license remains my intellectual property (Guglielmo Anfossi), while I am open to exploring its use in collaboration with your team.
