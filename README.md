@@ -59,10 +59,6 @@ npx hardhat run scripts/deploy.js --network holesky
 npx hardhat run scripts/deploy.js --network sepolia
 ```
 
-## Contributing
-
-- Open issues or pull requests against the upstream repository. If you want me to push and open a PR from your fork/branch, tell me which remote/branch to use.
-
 ## License & Credits
 
 - The license remains my intellectual property (Guglielmo Anfossi), while I am open to exploring its use in collaboration with your team.
