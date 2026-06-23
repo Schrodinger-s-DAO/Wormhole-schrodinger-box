@@ -1,4 +1,4 @@
-#Introduction
+# Introduction
 
 As kids, we carried our whole Pokémon collection in one binder. Dozens of cards, held as a single object you could pick up, hand to a friend, or take to school. Lift it once, and everything inside came with it.
 
