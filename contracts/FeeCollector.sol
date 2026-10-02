@@ -10,16 +10,16 @@ contract FeeCollector is Ownable {
 
     constructor(address initialOwner) Ownable(initialOwner) {}
 
-    // Withdraw ETH
+    /// @notice Sends the contract ETH balance to the owner.
     function withdrawETH() external onlyOwner {
-        payable(owner()).transfer(address(this).balance);
+        (bool ok,) = payable(owner()).call{value: address(this).balance}("");
+        require(ok, "ETH transfer failed");
     }
 
-    // Withdraw ERC20 tokens
+    /// @notice Sends ERC-20 tokens held by this contract to the owner.
     function withdrawERC20(address token, uint256 amount) external onlyOwner {
         IERC20(token).safeTransfer(owner(), amount);
     }
 
-    // Fallback to receive ETH
     receive() external payable {}
 }

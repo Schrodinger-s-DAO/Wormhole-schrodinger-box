@@ -11,11 +11,7 @@ contract SchrodingerCatNFT is ERC721URIStorage {
         _nextTokenId = 1;
     }
 
-    /**
-     * @dev Minta un nuovo NFT e lo assegna all'indirizzo specificato
-     * @param to Indirizzo a cui assegnare il token
-     * @return tokenId L'ID del token mintato
-     */
+    /// @notice Mints a cat NFT to `to`.
     function mint(address to) external returns (uint256) {
         uint256 tokenId = _nextTokenId++;
         _safeMint(to, tokenId);
@@ -23,9 +19,6 @@ contract SchrodingerCatNFT is ERC721URIStorage {
         return tokenId;
     }
 
-    /**
-     * @dev Implementazione di supportInterface
-     */
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
     }

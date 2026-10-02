@@ -6,7 +6,7 @@ A Schrödinger Box is that binder, made programmable: an NFT that bundles hetero
 
 It earns its name in transit. Value cannot leave the chain it was born on, so when a Box crosses chains the original locks in place and a shadow box appears on the far side, identical down to the last holding. For the length of the crossing two boxes exist: one frozen, one live, the same identity split by the bridge. Exactly one is ever alive, so a Box can never be spent twice. The paradox is the safety property.
 
-The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on testnet, built over Wormhole.
+The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Holesky and Sepolia, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md).
 
 ## Schrodinger Box
 
@@ -47,6 +47,23 @@ npx hardhat test --network sepolia
 ## Bridge Behavior
 
 - Bridging locks the original box on the source chain and recreates a shadow box with identical state on the target chain (same `boxId`). Both boxes coexist until the bridge completes or is reverted, reproducing the Schrödinger-style simultaneous states.
+
+## Deployments
+
+Addresses recorded for the public testnet deployments. Source verification on the explorer is separate from this list.
+
+| Network | Contract | Address |
+|---------|----------|---------|
+| Holesky | SchrodingerBox | [`0xE3c0C995fdC9C8B53383adB95f7816d4b3d657f5`](https://holesky.etherscan.io/address/0xE3c0C995fdC9C8B53383adB95f7816d4b3d657f5) |
+| Holesky | FeeCollector | [`0x7368A8DA33cad6Db111686A130687f64E4df39c7`](https://holesky.etherscan.io/address/0x7368A8DA33cad6Db111686A130687f64E4df39c7) |
+| Holesky | ParadoxToken | [`0xC23Cc5B5a56325b78A998678C3aB3b4cf299E0DC`](https://holesky.etherscan.io/address/0xC23Cc5B5a56325b78A998678C3aB3b4cf299E0DC) |
+| Holesky | SchrodingerCatNFT | [`0x463aA9fa9CC882306b81440cf16845170Fc1b843`](https://holesky.etherscan.io/address/0x463aA9fa9CC882306b81440cf16845170Fc1b843) |
+| Sepolia | SchrodingerBox | [`0xc858b43357b6D8D507ad8E069847b5CFb0181a71`](https://sepolia.etherscan.io/address/0xc858b43357b6D8D507ad8E069847b5CFb0181a71) |
+| Sepolia | FeeCollector | [`0x25305962f8EE3e349F79387695693f50b0f4BAA1`](https://sepolia.etherscan.io/address/0x25305962f8EE3e349F79387695693f50b0f4BAA1) |
+| Sepolia | ParadoxToken | [`0x84E17681cb4A5A8f89BF068a61594FF8699577c7`](https://sepolia.etherscan.io/address/0x84E17681cb4A5A8f89BF068a61594FF8699577c7) |
+| Sepolia | SchrodingerCatNFT | [`0x0A9902718f5b0fA61E390746F3d2490211712Fed`](https://sepolia.etherscan.io/address/0x0A9902718f5b0fA61E390746F3d2490211712Fed) |
+
+The same addresses are in `deployed_contracts.json`. These deployments predate the settlement fixes in this repository. A new deployment is required before the fixes are live.
 
 ## Environments & Deployment
 
