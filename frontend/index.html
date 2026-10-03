@@ -20,15 +20,18 @@
         <div>
           <p class="eyebrow">Testnet</p>
           <h1>Schrödinger <em>Box</em></h1>
-          <p class="sub">Ethereum Sepolia and Base Sepolia only.</p>
         </div>
       </div>
       <div class="wallet">
-        <p id="wallet-line">No wallet in this browser</p>
+        <div class="wallet-id">
+          <p id="wallet-line">No wallet</p>
+          <button type="button" id="btn-connect">Connect</button>
+        </div>
         <p id="wallet-chain" class="hint"></p>
-        <button type="button" id="btn-connect">Connect</button>
+        <p id="other-side" class="hint">Other side</p>
       </div>
     </header>
+    <p class="lede">Lock a box on this chain. A shadow appears on the other. Whoever holds the shadow receives the original when it comes home. Assets stay where you put them.</p>
 
     <p id="banner" class="banner" hidden></p>
     <div id="mismatch" class="banner warn" hidden>
@@ -55,10 +58,15 @@
         <div class="layout">
           <section class="panel">
             <div class="row spread">
-              <h2>Boxes</h2>
-              <button type="button" id="btn-refresh" class="ghost tiny">Refresh</button>
+              <h2 id="box-heading">Your boxes</h2>
+              <div class="row">
+                <div class="seg" role="tablist" aria-label="Which boxes">
+                  <button type="button" id="filter-mine" role="tab" aria-selected="true">Yours</button>
+                  <button type="button" id="filter-all" role="tab" aria-selected="false">All</button>
+                </div>
+                <button type="button" id="btn-refresh" class="ghost tiny">Refresh</button>
+              </div>
             </div>
-            <p class="hint">Open this page in a second browser for a second wallet.</p>
             <div id="box-list" class="box-list"></div>
           </section>
 
@@ -112,7 +120,7 @@
               </ol>
               <p id="delivery-status" class="hint">No message waiting.</p>
               <form id="form-bridge">
-                <label>Shadow receiver<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+                <label>Who receives the shadow<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
                 <p class="hint">Publish fee <span id="bridge-fee">…</span>. Guardians usually sign in 15–20 minutes. Nothing is stuck while you wait.</p>
                 <button type="submit">Lock and send</button>
               </form>

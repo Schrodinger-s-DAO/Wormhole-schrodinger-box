@@ -98,7 +98,7 @@ label {
   font-size: 13px;
 }
 
-.top, .bars, .meta, .banner, .empty, main {
+.top, .bars, .meta, .banner, .empty, .lede, main {
   width: min(1080px, calc(100% - 28px));
   margin-inline: auto;
   position: relative;
@@ -116,7 +116,15 @@ label {
 .brand { align-items: center; }
 .row { flex-wrap: wrap; }
 .row.spread { justify-content: space-between; }
-.wallet { flex-direction: column; align-items: flex-end; text-align: right; }
+.wallet { flex-direction: column; align-items: flex-end; text-align: right; gap: 4px; }
+.wallet-id { display: flex; align-items: center; gap: 8px; }
+#wallet-line { font-family: "IBM Plex Mono", monospace; font-size: 14px; }
+.lede {
+  margin-top: 16px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.35;
+}
 .eyebrow {
   margin: 0 0 4px;
   letter-spacing: 0.16em;

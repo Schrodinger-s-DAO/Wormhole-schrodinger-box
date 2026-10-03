@@ -58,6 +58,7 @@ const state = {
   busy: false,
   refreshing: false,
   refreshQueued: false,
+  boxScope: "mine",
   providers: {}
 };
 
@@ -428,7 +429,7 @@ async function refreshWallet() {
   if (!window.ethereum) {
     state.account = null;
     state.walletChainId = null;
-    $("wallet-line").textContent = "No wallet in this browser";
+    $("wallet-line").textContent = "No wallet";
     $("wallet-chain").textContent = "";
     $("banner").hidden = false;
     $("banner").textContent = "Install MetaMask, then connect.";
@@ -445,10 +446,10 @@ async function refreshWallet() {
   }
   const known = Object.values(NETWORKS).find((item) => item.chainId === state.walletChainId);
   if (!state.account) {
-    $("wallet-line").textContent = "No wallet connected";
+    $("wallet-line").textContent = "Not connected";
     $("wallet-chain").textContent = "";
   } else {
-    $("wallet-line").textContent = short(state.account);
+    $("wallet-line").textContent = `${state.account.slice(0, 6)}…`;
     $("wallet-chain").textContent = known ? known.name : "Unsupported network";
   }
   state.ethBalance = null;
@@ -496,7 +497,8 @@ async function refreshChain() {
     box.trustedContracts(other.wormholeId)
   ]);
   $("mint-fee").textContent = fee === 0n ? "free" : `${formatAmount(fee)} ETH`;
-  $("bridge-title").textContent = `Bridge to ${other.name}`;
+  $("bridge-title").textContent = `Send the shadow to ${other.name}`;
+  $("other-side").textContent = `Other side · ${other.name}`;
   const link = `${current.explorer}/address/${current.contracts.box}`;
   $("chain-meta").innerHTML = "";
   $("chain-meta").append(`${current.name} · ${trusted === ethers.ZeroHash ? "peer not set" : "peer connected"} · `);
@@ -552,17 +554,53 @@ function nftLabel(address) {
   return short(address);
 }
 
+function chainName(wormholeId) {
+  return Object.values(NETWORKS).find((item) => item.wormholeId === wormholeId)?.name || `chain ${wormholeId}`;
+}
+
+function otherSideText(item) {
+  if (item.original) return `Goes to ${otherNetwork(state.networkKey).name}`;
+  return `Home is ${chainName(item.originChain)} · original #${item.originBoxId}`;
+}
+
+function visibleBoxes() {
+  if (state.boxScope === "all") return state.boxes;
+  return state.boxes.filter((item) => same(item.owner, state.account) || (item.original && item.locked));
+}
+
+function paintScope() {
+  const mine = state.boxScope !== "all";
+  $("filter-mine").setAttribute("aria-selected", String(mine));
+  $("filter-all").setAttribute("aria-selected", String(!mine));
+  $("box-heading").textContent = mine ? "Your boxes" : "All boxes";
+}
+
 function renderBoxes() {
   const host = $("box-list");
   host.replaceChildren();
+  paintScope();
+  const visible = visibleBoxes();
+  const raw = $("box-id").value.trim();
+  if (!visible.some((item) => item.id.toString() === raw)) {
+    const pick = visible.find((item) => item.original && !item.locked && same(item.owner, state.account))
+      || visible.find((item) => same(item.owner, state.account))
+      || visible.find((item) => item.original && item.locked)
+      || null;
+    $("box-id").value = pick ? pick.id.toString() : "";
+  }
   if (state.boxes.length === 0) {
     host.append(el("p", "hint", "No boxes on this network yet."));
     syncSelection();
     return;
   }
+  if (visible.length === 0) {
+    host.append(el("p", "hint", "Nothing in this wallet. Mint a box, or show all."));
+    syncSelection();
+    return;
+  }
   const selected = $("box-id").value.trim();
   let group = "";
-  for (const item of state.boxes) {
+  for (const item of visible) {
     const held = same(item.owner, network().contracts.box);
     const mine = same(item.owner, state.account);
     const next = item.original && item.locked ? "Locked" : mine ? "Yours" : "Others";
@@ -580,7 +618,7 @@ function renderBoxes() {
     if (item.tokens.length === 0 && item.nfts.length === 0) card.append(el("div", "hint", "empty"));
     for (const token of item.tokens) card.append(el("div", "", `${tokenLabel(token.address)} ${formatAmount(token.amount)}`));
     for (const nft of item.nfts) card.append(el("div", "", `${nftLabel(nft.contract)} #${nft.id}`));
-    card.append(el("div", "hint", `origin chain ${item.originChain} · origin id ${item.originBoxId}`));
+    card.append(el("div", "hint", otherSideText(item)));
     card.addEventListener("click", () => selectBox(item));
     host.append(card);
   }
@@ -617,11 +655,12 @@ function syncSelection() {
     paintForms();
     return;
   }
-  if (item.original && item.locked) hint.textContent = "Locked. No owner. The shadow’s holder receives it when it comes home.";
+  const other = otherNetwork(state.networkKey).name;
+  if (item.original && item.locked) hint.textContent = `Locked. No owner. It goes to ${other}. The shadow’s holder there receives it.`;
   else if (item.original) hint.textContent = same(item.owner, state.account)
-    ? "Open original. Put assets in, or lock it to mint a shadow."
-    : "Open original in another wallet.";
-  else hint.textContent = "Send this shadow to another wallet. That wallet receives the original when it comes home.";
+    ? `Open. Lock it and the shadow goes to ${other}. You choose who receives it.`
+    : `Open original in another wallet. Its shadow goes to ${other}.`;
+  else hint.textContent = `${otherSideText(item)}. Send this shadow, and that wallet receives the original.`;
   renderContents();
   paintForms();
 }
@@ -1205,6 +1244,14 @@ function bind() {
       return;
     }
     $("trust-addr").value = other.contracts.box;
+  });
+  $("filter-mine").addEventListener("click", () => {
+    state.boxScope = "mine";
+    renderBoxes();
+  });
+  $("filter-all").addEventListener("click", () => {
+    state.boxScope = "all";
+    renderBoxes();
   });
   $("chain-sepolia").addEventListener("click", () => switchNetwork("sepolia"));
   $("chain-base").addEventListener("click", () => switchNetwork("base"));
