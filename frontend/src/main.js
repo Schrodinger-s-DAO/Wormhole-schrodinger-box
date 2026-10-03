@@ -60,6 +60,7 @@ const state = {
   refreshQueued: false,
   boxScope: "mine",
   messages: [],
+  vaaCache: {},
   providers: {}
 };
 
@@ -330,6 +331,7 @@ function forgetSend(sourceChain, sequence) {
     state.readyVaa = null;
     state.readyId = null;
   }
+  delete state.vaaCache[id];
 }
 
 function fromBase64(value) {
@@ -537,7 +539,6 @@ async function refreshChain() {
     box.trustedContracts(other.wormholeId)
   ]);
   $("mint-fee").textContent = fee === 0n ? "free" : `${formatAmount(fee)} ETH`;
-  $("bridge-title").textContent = `Send the shadow to ${other.name}`;
   $("other-side").textContent = `Other side · ${other.name}`;
   const link = `${current.explorer}/address/${current.contracts.box}`;
   $("chain-meta").innerHTML = "";
@@ -608,11 +609,26 @@ function otherSideText(item) {
   return `Home is ${chainName(item.originChain)} · original #${item.originBoxId}`;
 }
 
+function receiverFor(item) {
+  const message = currentPending().find((entry) => (
+    entry.sourceKey === state.networkKey && entry.originBoxId === item.id.toString() && entry.receiver
+  ));
+  return item.target || message?.receiver || null;
+}
+
 function targetLabel(item) {
   const where = otherNetwork(state.networkKey).name;
-  if (!item.target) return `the target on ${where}`;
-  const who = same(item.target, state.account) ? "You" : short(item.target);
-  return `${who} on ${where}`;
+  const address = receiverFor(item);
+  if (!address) return `the target on ${where}`;
+  return `${address} on ${where}`;
+}
+
+function insideText(item) {
+  const parts = [
+    ...item.tokens.map((token) => `${tokenLabel(token.address)} ${formatAmount(token.amount)}`),
+    ...item.nfts.map((nft) => `${nftLabel(nft.contract)} #${nft.id}`)
+  ];
+  return parts.length ? `Inside: ${parts.join(", ")}.` : "Inside: nothing.";
 }
 
 async function shadowTargets(originIds) {
@@ -734,16 +750,17 @@ function syncSelection() {
     return;
   }
   const other = otherNetwork(state.networkKey).name;
+  const inside = insideText(item);
   if (item.original && item.locked) {
     const inflight = currentPending().some((message) => message.sourceKey === state.networkKey);
     hint.textContent = inflight
-      ? `Locked. Owned by ${targetLabel(item)}. The shadow is not on ${other} yet, so it cannot be sent or destroyed.`
-      : `Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
+      ? `${inside} Locked. Owned by ${targetLabel(item)}. The shadow is not on ${other} yet, so it cannot be sent or destroyed.`
+      : `${inside} Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
   }
   else if (item.original) hint.textContent = same(item.owner, state.account)
-    ? `Open. Lock it and the shadow goes to ${other}. You choose who receives it.`
-    : `Open original in another wallet. Its shadow goes to ${other}.`;
-  else hint.textContent = `${otherSideText(item)}. Send this shadow, and that wallet receives the original.`;
+    ? `${inside} Open. Lock it and the shadow goes to ${other}. You choose who receives it.`
+    : `${inside} Open original in another wallet. Its shadow goes to ${other}.`;
+  else hint.textContent = `${inside} ${otherSideText(item)}. Send this shadow, and that wallet receives the original.`;
   renderContents();
   paintForms();
 }
@@ -767,6 +784,37 @@ function selectedItem() {
 
 function currentPending() {
   return state.messages;
+}
+
+const PUBLISHED_ABI = [
+  "event LogMessagePublished(address indexed sender, uint64 sequence, uint32 nonce, bytes payload, uint8 consistencyLevel)"
+];
+const BOX_TUPLE = "tuple(address[] erc20Tokens,uint256[] erc20Amounts,address[] erc721Contracts,uint256[] erc721TokenIds,bool isLocked,uint16 originChain,bool isOriginal,uint256 creationTime,bytes32 messageNonce,uint256 originBoxId)";
+
+async function readBridgePayload(source, event) {
+  if (!source.contracts?.core || !event.transactionHash) return {};
+  try {
+    const receipt = await providerFor(source).getTransactionReceipt(event.transactionHash);
+    if (!receipt) return {};
+    const iface = new ethers.Interface(PUBLISHED_ABI);
+    const coder = ethers.AbiCoder.defaultAbiCoder();
+    for (const entry of receipt.logs) {
+      if (!same(entry.address, source.contracts.core)) continue;
+      let parsed = null;
+      try {
+        parsed = iface.parseLog(entry);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || parsed.args.sequence.toString() !== event.args.sequence.toString()) continue;
+      const outer = coder.decode(["uint16", "address", "bytes", "bytes32"], parsed.args.payload);
+      const inner = coder.decode(["uint8", "uint256", BOX_TUPLE, "address", "bytes32"], outer[2]);
+      return { receiver: inner[3], originBoxId: inner[1].toString() };
+    }
+  } catch {
+    return {};
+  }
+  return {};
 }
 
 function networkByWormhole(id) {
@@ -823,6 +871,7 @@ async function findMessages() {
         startedAt = null;
       }
       const saved = loadPending().find((item) => item.id === id);
+      const carried = await readBridgePayload(source, event);
       pending.push({
         id,
         sourceKey,
@@ -830,7 +879,9 @@ async function findMessages() {
         sourceChain: source.wormholeId,
         sequence,
         emitter: source.contracts.mailbox,
-        startedAt: saved?.startedAt || startedAt
+        startedAt: saved?.startedAt || startedAt,
+        receiver: carried.receiver || saved?.receiver || null,
+        originBoxId: carried.originBoxId || saved?.originBoxId || null
       });
     }
   }
@@ -865,13 +916,14 @@ function paintSteps(phase) {
 
 function stageCopy(item, signed) {
   const target = NETWORKS[item.targetKey].name;
-  if (!signed) return `${waitCopy(item)} The shadow does not exist yet, so it cannot be sent or destroyed.`;
+  const who = item.receiver ? ` It goes to ${item.receiver}.` : "";
+  if (!signed) return `${waitCopy(item)} The shadow does not exist yet, so it cannot be sent or destroyed.${who}`;
   if (item.targetKey === state.networkKey) {
-    let line = `Signed. You are on ${target}. Press Deliver here. That creates the shadow.`;
+    let line = `Signed. You are on ${target}. Press Deliver here. That creates the shadow.${who}`;
     if (state.account && state.ethBalance === 0n) line += ` This wallet has no ETH on ${target} for gas.`;
     return line;
   }
-  return `Signed. Deliver on ${target}. This page cannot do it. The shadow does not exist until then, so it cannot be sent or destroyed.`;
+  return `Signed. Deliver on ${target}. This page cannot do it. The shadow does not exist until then, so it cannot be sent or destroyed.${who}`;
 }
 
 function renderContents() {
@@ -879,15 +931,17 @@ function renderContents() {
   host.replaceChildren();
   const raw = $("box-id").value.trim();
   const item = state.boxes.find((box) => box.id.toString() === raw);
-  if (!item || (item.tokens.length === 0 && item.nfts.length === 0)) return;
+  if (!item) return;
+  host.append(el("p", "hint", insideText(item)));
   const canOpen = item.original && !item.locked && same(item.owner, state.account);
+  if (!canOpen) return;
   for (const token of item.tokens) {
     const label = `${tokenLabel(token.address)} ${formatAmount(token.amount)}`;
-    host.append(canOpen ? takeButton(`Take out ${label}`, () => takeToken(item.id, token.address)) : el("span", "hint", label));
+    host.append(takeButton(`Take out ${label}`, () => takeToken(item.id, token.address)));
   }
   for (const nft of item.nfts) {
     const label = `${nftLabel(nft.contract)} #${nft.id}`;
-    host.append(canOpen ? takeButton(`Take out ${label}`, () => takeNft(item.id, nft.contract, nft.id)) : el("span", "hint", label));
+    host.append(takeButton(`Take out ${label}`, () => takeNft(item.id, nft.contract, nft.id)));
   }
 }
 
@@ -1185,32 +1239,33 @@ async function refreshDelivery() {
       $("bridge-title").textContent = "Shadow is live";
       status.textContent = `Locked. Owned by ${targetLabel(locked)}. The shadow is on ${otherNetwork(state.networkKey).name}. Send it or destroy it there.`;
     } else {
+      $("bridge-title").textContent = "Bridge";
       status.textContent = "No message waiting.";
     }
     paintForms();
     return;
   }
-  $("step-done").textContent = `Deliver on ${NETWORKS[item.targetKey].name}`;
-  const vaa = await fetchVaa(item);
   const here = item.targetKey === state.networkKey;
+  const targetName = NETWORKS[item.targetKey].name;
+  $("step-done").textContent = `Deliver on ${targetName}`;
+  $("bridge-title").textContent = here ? "Deliver here" : `Deliver on ${targetName}`;
+  const vaa = state.vaaCache[item.id] || await fetchVaa(item);
   if (!vaa) {
     state.readyVaa = null;
     state.readyId = null;
     button.hidden = true;
     paintSteps("waiting");
-    const line = stageCopy(item, false);
-    status.textContent = line;
+    status.textContent = stageCopy(item, false);
     $("bridge-title").textContent = "Waiting for Wormhole";
     paintForms();
     return;
   }
+  state.vaaCache[item.id] = vaa;
   state.readyVaa = here ? vaa : null;
   state.readyId = here ? item.id : null;
   button.hidden = !here;
   paintSteps("signed");
-  const line = stageCopy(item, true);
-  status.textContent = line;
-  $("bridge-title").textContent = line;
+  status.textContent = stageCopy(item, true);
   paintForms();
 }
 
@@ -1239,11 +1294,9 @@ async function onDeliver() {
     const mailbox = new ethers.Contract(network().contracts.mailbox, mailboxAbi, provider());
     const gas = ((await mailbox.deliver.estimateGas(vaa, { from })) * 3n) / 2n;
     const fee = await provider().getFeeData();
-    let maxFee = fee.maxFeePerGas ?? fee.gasPrice ?? 20_000_000n;
-    let priority = fee.maxPriorityFeePerGas ?? 1_000_000n;
-    if (priority > maxFee) priority = maxFee;
+    const gasPrice = fee.gasPrice ?? fee.maxFeePerGas ?? 20_000_000n;
     const balance = await provider().getBalance(from);
-    const cost = gas * maxFee;
+    const cost = gas * gasPrice;
     if (balance < cost) {
       throw invalid(`This wallet has ${ethers.formatEther(balance)} ETH on ${network().name}. Delivery needs about ${ethers.formatEther(cost)} ETH for gas.`);
     }
@@ -1256,8 +1309,7 @@ async function onDeliver() {
         data,
         value: "0x0",
         gas: ethers.toQuantity(gas),
-        maxFeePerGas: ethers.toQuantity(maxFee),
-        maxPriorityFeePerGas: ethers.toQuantity(priority)
+        gasPrice: ethers.toQuantity(gasPrice)
       }]
     });
     log(`tx ${hash}`);
