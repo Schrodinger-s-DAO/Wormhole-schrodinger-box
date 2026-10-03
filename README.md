@@ -6,7 +6,7 @@ A Schrödinger Box is that binder, made programmable: an NFT that bundles hetero
 
 It earns its name in transit. Value cannot leave the chain it was born on, so when a Box crosses chains the original locks in place and a shadow box appears on the far side, identical down to the last holding. For the length of the crossing two boxes exist: one frozen, one live, the same identity split by the bridge. Exactly one is ever alive, so a Box can never be spent twice. The paradox is the safety property.
 
-The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Holesky and Sepolia, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md).
+The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Sepolia ETH and Sepolia BASE, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md).
 
 ## Schrodinger Box
 
