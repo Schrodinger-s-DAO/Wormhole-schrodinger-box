@@ -76,14 +76,20 @@
             <p id="selected-hint" class="hint">Mint a box, or pick one.</p>
             <div id="contents" class="chips"></div>
 
+            <form id="form-mint" class="card">
+              <h3>1. Mint a box</h3>
+              <p class="hint">The folder, on this chain. Fee <span id="mint-fee">…</span>.</p>
+              <button type="submit">Mint box</button>
+            </form>
+
             <div class="card faucet" id="practice">
-              <h3>Practice assets</h3>
-              <p class="hint">ETH <span id="asset-eth">—</span> · PAR <span id="asset-par">—</span>. Put them into the open box you picked, or the newest one you hold.</p>
+              <h3>2. Mock assets, on this chain</h3>
+              <p class="hint">Mint them here. Then put them in an open box you hold. ETH <span id="asset-eth">—</span> · PAR <span id="asset-par">—</span>.</p>
               <form id="form-par" class="inline">
                 <label>PAR<input id="par-amount" inputmode="decimal" value="100" /></label>
                 <button type="button" id="btn-par-all" class="ghost">All</button>
                 <button type="submit" class="ghost">Mint PAR</button>
-                <button type="button" id="btn-put-par">Put in box</button>
+                <button type="button" id="btn-put-par">Put PAR in box</button>
               </form>
               <div class="row">
                 <form id="form-cat">
@@ -92,12 +98,6 @@
               </div>
               <div id="cat-list" class="chips"></div>
             </div>
-
-            <form id="form-mint" class="card">
-              <h3>Mint box</h3>
-              <p class="hint">Fee <span id="mint-fee">…</span>.</p>
-              <button type="submit">Mint box</button>
-            </form>
 
             <form id="form-transfer" class="card" hidden>
               <h3>Send the shadow</h3>

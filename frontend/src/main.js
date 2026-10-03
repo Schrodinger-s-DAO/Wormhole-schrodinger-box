@@ -68,12 +68,15 @@ function network() {
   return NETWORKS[state.networkKey];
 }
 
-function provider() {
-  const current = network();
-  if (!state.providers[current.key]) {
-    state.providers[current.key] = new ethers.JsonRpcProvider(current.rpc, current.chainId);
+function providerFor(net) {
+  if (!state.providers[net.key]) {
+    state.providers[net.key] = new ethers.JsonRpcProvider(net.rpc, net.chainId);
   }
-  return state.providers[current.key];
+  return state.providers[net.key];
+}
+
+function provider() {
+  return providerFor(network());
 }
 
 function el(tag, className, text) {
@@ -530,6 +533,11 @@ async function refreshBoxes() {
       }))
     });
   }
+  const lockedIds = items.filter((item) => item.original && item.locked).map((item) => item.id);
+  const targets = await shadowTargets(lockedIds);
+  for (const item of items) {
+    if (item.original && item.locked) item.target = targets.get(item.id.toString()) || null;
+  }
   const rank = (item) => {
     if (item.original && item.locked) return 1;
     if (same(item.owner, state.account)) return 0;
@@ -561,6 +569,36 @@ function chainName(wormholeId) {
 function otherSideText(item) {
   if (item.original) return `Goes to ${otherNetwork(state.networkKey).name}`;
   return `Home is ${chainName(item.originChain)} · original #${item.originBoxId}`;
+}
+
+function targetLabel(item) {
+  const where = otherNetwork(state.networkKey).name;
+  if (!item.target) return `the target on ${where}`;
+  const who = same(item.target, state.account) ? "You" : short(item.target);
+  return `${who} on ${where}`;
+}
+
+async function shadowTargets(originIds) {
+  const found = new Map();
+  const other = otherNetwork(state.networkKey);
+  if (!other.contracts || originIds.length === 0) return found;
+  try {
+    const box = new ethers.Contract(other.contracts.box, boxAbi, providerFor(other));
+    const supply = await box.totalSupply();
+    const wanted = new Set(originIds.map((id) => id.toString()));
+    const here = network().wormholeId;
+    for (let index = 0n; index < supply; index++) {
+      const id = await box.tokenByIndex(index);
+      const details = await box.getBoxDetails(id);
+      if (details.isOriginal || Number(details.originChain) !== here) continue;
+      const originId = details.originBoxId.toString();
+      if (!wanted.has(originId)) continue;
+      found.set(originId, await box.ownerOf(id));
+    }
+  } catch {
+    /* The other chain can be read on the next refresh. */
+  }
+  return found;
 }
 
 function visibleBoxes() {
@@ -614,7 +652,10 @@ function renderBoxes() {
     const head = el("div", "row");
     head.append(el("span", "id", `#${item.id}`), el("span", `tag ${tagKind(item)}`, tagText(item)));
     card.append(head);
-    card.append(el("div", "", held || (item.original && item.locked) ? "No owner" : mine ? "you" : short(item.owner)));
+    const who = item.original && item.locked
+      ? `Owned by ${targetLabel(item)}`
+      : held ? "this contract" : mine ? "you" : short(item.owner);
+    card.append(el("div", "", who));
     if (item.tokens.length === 0 && item.nfts.length === 0) card.append(el("div", "hint", "empty"));
     for (const token of item.tokens) card.append(el("div", "", `${tokenLabel(token.address)} ${formatAmount(token.amount)}`));
     for (const nft of item.nfts) card.append(el("div", "", `${nftLabel(nft.contract)} #${nft.id}`));
@@ -656,7 +697,7 @@ function syncSelection() {
     return;
   }
   const other = otherNetwork(state.networkKey).name;
-  if (item.original && item.locked) hint.textContent = `Locked. No owner. It goes to ${other}. The shadow’s holder there receives it.`;
+  if (item.original && item.locked) hint.textContent = `Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
   else if (item.original) hint.textContent = same(item.owner, state.account)
     ? `Open. Lock it and the shadow goes to ${other}. You choose who receives it.`
     : `Open original in another wallet. Its shadow goes to ${other}.`;
@@ -673,12 +714,11 @@ function paintForms() {
   $("form-bridge").hidden = waiting || !openMine;
   $("form-return").hidden = waiting || !shadowMine;
   $("form-transfer").hidden = !shadowMine;
-  $("practice").hidden = Boolean(item) && !openMine;
   const lockedHere = Boolean(item && item.original && item.locked);
   $("timeline").hidden = !waiting && !lockedHere;
   if (!waiting && lockedHere) {
     paintSteps("waiting");
-    $("delivery-status").textContent = "Locked. No owner. The shadow’s holder receives it when it comes home.";
+    $("delivery-status").textContent = `Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
   }
 }
 
@@ -1005,7 +1045,7 @@ async function refreshDelivery() {
     const locked = selectedItem();
     if (locked?.original && locked.locked) {
       paintSteps("waiting");
-      status.textContent = "Locked. No owner. The shadow’s holder receives it when it comes home.";
+      status.textContent = `Locked. Owned by ${targetLabel(locked)}. That wallet receives this folder when the shadow comes home.`;
     } else {
       status.textContent = "No message waiting.";
     }
