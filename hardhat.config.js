@@ -11,9 +11,9 @@ function remoteNetwork(urlEnv, chainId) {
 
 const networks = {};
 const sepolia = remoteNetwork("SEPOLIA_RPC_URL", 11155111);
-const holesky = remoteNetwork("HOLESKY_RPC_URL", 17000);
+const baseSepolia = remoteNetwork("BASE_SEPOLIA_RPC_URL", 84532);
 if (sepolia) networks.sepolia = sepolia;
-if (holesky) networks.holesky = holesky;
+if (baseSepolia) networks.baseSepolia = baseSepolia;
 
 const etherscanKey = process.env.ETHERSCAN_API_KEY;
 
@@ -30,6 +30,6 @@ module.exports = {
   },
   networks,
   etherscan: etherscanKey
-    ? { apiKey: { sepolia: etherscanKey, holesky: etherscanKey } }
+    ? { apiKey: { sepolia: etherscanKey, baseSepolia: etherscanKey } }
     : undefined
 };

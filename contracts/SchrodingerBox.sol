@@ -56,6 +56,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         bool isOriginal;
         uint256 creationTime;
         bytes32 messageNonce;
+        uint256 originBoxId;
     }
 
     // Replay protection for Wormhole deliveries.
@@ -72,7 +73,10 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     uint256 public mintingFee;
     uint256 private _tokenIdCounter;
 
-    uint256 public constant GAS_LIMIT = 500000;
+    /// @dev Base gas for a delivery, plus one increment per listed asset.
+    ///      A full box writes about 80 storage slots; 500k is not enough for that.
+    uint256 public constant BASE_DELIVERY_GAS = 800_000;
+    uint256 public constant GAS_PER_ASSET = 60_000;
     uint256 public constant DEFAULT_WORMHOLE_FEE = 0.01 ether; // Default fee for testnets
 
     // Events
@@ -88,7 +92,6 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     event FeeCollectorUpdated(address newFeeCollector);
     event TrustedContractUpdated(uint16 chainId, bytes32 contractAddress);
     event BridgeError(string reason);
-    event DebugLog(string action, uint16 targetChain, bytes32 targetContract, uint256 value);
 
     // Errors
     error NotBoxOwner();
@@ -111,6 +114,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     error TooManyAssets();
     error DuplicateAsset();
     error AssetNotReceived();
+    error UnknownAction();
 
     constructor(
         address _wormholeRelayer,
@@ -177,7 +181,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
             originChain: chainId,
             isOriginal: true,
             creationTime: block.timestamp,
-            messageNonce: bytes32(0)
+            messageNonce: bytes32(0),
+            originBoxId: boxId
         });
 
         _safeMint(msg.sender, boxId);
@@ -197,6 +202,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         uint256 amount
     ) external nonReentrant {
         if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
+        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
         if (boxes[boxId].isLocked) revert BoxLocked();
         if (token == address(0)) revert InvalidAddress();
         if (amount == 0) revert ZeroAmount();
@@ -225,6 +231,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         address token
     ) external nonReentrant {
         if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
+        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
         if (boxes[boxId].isLocked) revert BoxLocked();
 
         for (uint i = 0; i < boxes[boxId].erc20Tokens.length; i++) {
@@ -254,6 +261,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         uint256 tokenId
     ) external nonReentrant {
         if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
+        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
         if (boxes[boxId].isLocked) revert BoxLocked();
         if (nftContract == address(0)) revert InvalidAddress();
         if (boxes[boxId].erc721Contracts.length >= MAX_ASSETS) revert TooManyAssets();
@@ -281,6 +289,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         uint256 tokenId
     ) external nonReentrant {
         if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
+        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
         if (boxes[boxId].isLocked) revert BoxLocked();
 
         for (uint i = 0; i < boxes[boxId].erc721Contracts.length; i++) {
@@ -303,13 +312,23 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         revert InsufficientBalance();
     }
 
-    /// @notice Quotes the Wormhole delivery fee for a target chain.
+    /// @notice Gas forwarded with a delivery for a box that lists `assetCount` assets.
+    function deliveryGasLimit(uint256 assetCount) public pure returns (uint256) {
+        return BASE_DELIVERY_GAS + assetCount * GAS_PER_ASSET;
+    }
+
+    /// @notice Quotes the Wormhole delivery fee for an empty box.
     function getWormholeFee(uint16 targetChain) public view returns (uint256) {
+        return getWormholeFee(targetChain, 0);
+    }
+
+    /// @notice Quotes the Wormhole delivery fee for a box with `assetCount` listed assets.
+    function getWormholeFee(uint16 targetChain, uint256 assetCount) public view returns (uint256) {
         // Improved fee calculation with fallback
         try wormholeRelayer.quoteEVMDeliveryPrice(
-            targetChain, 
-            0, // No receiver value 
-            GAS_LIMIT
+            targetChain,
+            0, // No receiver value
+            deliveryGasLimit(assetCount)
         ) returns (uint256 deliveryPrice, uint256) {
             return deliveryPrice;
         } catch {
@@ -336,7 +355,9 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         uint256 boxId
     ) external payable nonReentrant {
         if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
+        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
         if (boxes[boxId].isLocked) revert BoxLocked();
+        if (receiver == address(0)) revert InvalidAddress();
         if (targetChain == chainId) revert InvalidTargetChain();
         
         bytes32 targetContract = trustedContracts[targetChain];
@@ -358,22 +379,21 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         );
 
         // Send message with Wormhole - improved error handling
-        uint256 wormholeFee = getWormholeFee(targetChain);
+        uint256 assetCount = boxes[boxId].erc20Tokens.length + boxes[boxId].erc721Contracts.length;
+        uint256 wormholeFee = getWormholeFee(targetChain, assetCount);
         if (msg.value < wormholeFee) revert InsufficientWormholeFee();
-        
-        // Debug log for troubleshooting
-        emit DebugLog("Bridging", targetChain, targetContract, msg.value);
-        
+
         try wormholeRelayer.sendPayloadToEvm{value: wormholeFee}(
             targetChain,
             address(uint160(uint256(targetContract))),
             payload,
             0, // No additional fee
-            GAS_LIMIT
+            deliveryGasLimit(assetCount)
         ) returns (uint64) {
-            // Only lock the box if the bridging was successful
+            // The contract holds the original. No wallet owns it until the shadow comes home.
+            _transfer(msg.sender, address(this), boxId);
             boxes[boxId].isLocked = true;
-            
+
             _refundExcess(wormholeFee);
 
             emit BoxBridged(boxId, targetChain, targetContract);
@@ -400,30 +420,31 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         if (boxes[boxId].erc20Tokens.length != boxes[boxId].erc20Amounts.length) revert ArrayLengthMismatch();
         if (boxes[boxId].erc721Contracts.length != boxes[boxId].erc721TokenIds.length) revert ArrayLengthMismatch();
 
+        uint256 originBoxId = boxes[boxId].originBoxId;
+        if (originBoxId == 0) revert NotShadowBox();
+
         bytes32 messageNonce = generateMessageNonce(boxId);
-        
-        // Prepare message for the target
+
+        // The id in the message is the original box, not this shadow's local id.
         bytes memory payload = abi.encode(
             uint8(2), // action: 2 = return
-            boxId,
+            originBoxId,
             boxes[boxId],
             msg.sender,
             messageNonce
         );
 
         // Send message with Wormhole - improved error handling
-        uint256 wormholeFee = getWormholeFee(targetChain);
+        uint256 assetCount = boxes[boxId].erc20Tokens.length + boxes[boxId].erc721Contracts.length;
+        uint256 wormholeFee = getWormholeFee(targetChain, assetCount);
         if (msg.value < wormholeFee) revert InsufficientWormholeFee();
-        
-        // Debug log for troubleshooting
-        emit DebugLog("Returning", targetChain, targetContract, msg.value);
-        
+
         try wormholeRelayer.sendPayloadToEvm{value: wormholeFee}(
             targetChain,
             address(uint160(uint256(targetContract))),
             payload,
             0, // No additional fee
-            GAS_LIMIT
+            deliveryGasLimit(assetCount)
         ) returns (uint64) {
             // Burn the shadow box
             _burn(boxId);
@@ -449,7 +470,7 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         bytes32 sourceAddress,
         uint16 sourceChain,
         bytes32
-    ) external payable override onlyWormholeRelayer {
+    ) external payable override onlyWormholeRelayer nonReentrant {
         bytes32 expectedSourceAddress = trustedContracts[sourceChain];
         if (expectedSourceAddress != sourceAddress) revert UntrustedSource();
 
@@ -463,27 +484,44 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
 
         if (boxData.erc20Tokens.length != boxData.erc20Amounts.length) revert ArrayLengthMismatch();
         if (boxData.erc721Contracts.length != boxData.erc721TokenIds.length) revert ArrayLengthMismatch();
+        if (boxData.erc20Tokens.length > MAX_ASSETS || boxData.erc721Contracts.length > MAX_ASSETS) revert TooManyAssets();
+        if (receiver == address(0)) revert InvalidAddress();
 
         if (action == 1) {
-            if (_tokenIdCounter < boxId) {
-                _tokenIdCounter = boxId;
-            }
-            
+            // A shadow gets a fresh local id. Reusing `boxId` collides with a box this chain already minted.
+            uint256 localId = _nextTokenId();
             boxData.isOriginal = false;
+            boxData.isLocked = false;
+            boxData.originBoxId = boxId;
             boxData.messageNonce = messageNonce;
-            boxes[boxId] = boxData;
-            _safeMint(receiver, boxId);
-            
-            emit BoxReceived(boxId, receiver);
+            boxes[localId] = boxData;
+            _safeMint(receiver, localId);
+
+            emit BoxReceived(localId, receiver);
         } else if (action == 2) {
-            // Return action: Unlock original box
-            if (!boxData.isOriginal || boxData.originChain != chainId) revert NotOriginalBox();
-            if (!boxes[boxId].isLocked) revert BoxNotLocked();
-            
-            boxes[boxId].isLocked = false;
-            
+            // The shadow's copy says isOriginal = false. Trust the box stored here, not that flag.
+            Box storage original = boxes[boxId];
+            if (!original.isOriginal || original.originChain != chainId) revert NotOriginalBox();
+            if (!original.isLocked) revert BoxNotLocked();
+
+            original.isLocked = false;
+            address holder = ownerOf(boxId);
+            if (holder != receiver) {
+                _transfer(holder, receiver, boxId);
+            }
+
             emit BoxReceived(boxId, receiver);
+        } else {
+            revert UnknownAction();
         }
+    }
+
+    /// @dev A locked original sits on this contract. Only unlocking it, which happens before the transfer home, lets it move.
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        if (to != address(0) && _ownerOf(tokenId) != address(0) && boxes[tokenId].isLocked) {
+            revert BoxLocked();
+        }
+        return super._update(to, tokenId, auth);
     }
 
     /// @dev Pulls `amount` and returns the balance that actually arrived.
@@ -510,7 +548,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         uint256[] memory erc721TokenIds,
         bool isLocked,
         uint16 originChain,
-        bool isOriginal
+        bool isOriginal,
+        uint256 originBoxId
     ) {
         Box storage box = boxes[boxId];
         return (
@@ -520,7 +559,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
             box.erc721TokenIds,
             box.isLocked,
             box.originChain,
-            box.isOriginal
+            box.isOriginal,
+            box.originBoxId
         );
     }
 

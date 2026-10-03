@@ -2,7 +2,7 @@
 
 Self-review of `contracts/SchrodingerBox.sol` and the ETH path in `contracts/FeeCollector.sol`. This is not a third-party audit. The findings below were in the previous version of the contracts and are fixed in the current source.
 
-**Scope:** deposits, withdrawals, minting-fee refunds, and the bridge refund. Wormhole message authentication (trusted source, replay nonce) was reviewed and left as it was.
+**Scope:** deposits, withdrawals, minting-fee refunds, the bridge refund, and the Wormhole round trip. Message authentication (trusted source, replay nonce) is unchanged.
 
 ## Summary
 
@@ -13,8 +13,15 @@ Self-review of `contracts/SchrodingerBox.sol` and the ETH path in `contracts/Fee
 | M-02 | ETH refunds use `address.transfer` | Medium | Fixed |
 | L-01 | Asset lists inside a box have no cap | Low | Fixed |
 | I-01 | Comments mixed Italian and English | Info | Fixed |
+| H-02 | Returning a shadow box is rejected, so the original stays locked | High | Fixed |
+| H-03 | A shadow box can withdraw another user's tokens | High | Fixed |
+| H-04 | Reusing the origin box id collides on the destination | High | Fixed |
+| M-03 | A locked box can still be transferred | Medium | Fixed |
+| L-02 | Delivery gas is fixed at 500k | Low | Fixed |
+| L-03 | Bridge receiver is not checked against the zero address | Low | Fixed |
+| I-02 | `DebugLog` events in production code | Info | Fixed |
 
-The deployed Holesky and Sepolia addresses in the README are the previous bytecode. These fixes are in the repository only until a new deployment.
+The deployed Holesky and Sepolia addresses in the README are the previous bytecode. These fixes, including the bridge fixes below, are in the repository only until a new deployment.
 
 ## H-01 — ERC-20 `transferFrom` return value is ignored
 
@@ -64,10 +71,65 @@ Each deposit of a new token or NFT pushed an unbounded array. Reads and the brid
 
 NatSpec and inline comments in `SchrodingerBox` and `SchrodingerCatNFT` were partly Italian. They are English now.
 
+## H-02 — Returning a shadow box is rejected
+
+**Severity:** High
+
+`returnShadowBox` sent the shadow's own `Box`, whose `isOriginal` flag is false. The origin required `boxData.isOriginal == true` and reverted with `NotOriginalBox`. The shadow had already been burned, and the original stayed locked with the assets inside.
+
+**Fix:** the origin unlocks the box it stored, and ignores the `isOriginal` flag carried in the return message. The message names the original id. After unlock, that box is transferred to the account that sent the shadow home.
+
+## H-03 — A shadow box can withdraw another user's tokens
+
+**Severity:** High
+
+A shadow arrived unlocked and copied the asset list, but the tokens never moved. `withdrawERC20` did not check `isOriginal`. If the same token address exists on the destination, the shadow paid itself from deposits other users had made into that chain's contract.
+
+**Fix:** deposit and withdraw require an original, unlocked box. A shadow can be transferred. It cannot take tokens out of the destination contract.
+
+## H-04 — Reusing the origin box id collides on the destination
+
+**Severity:** High
+
+Each chain numbers boxes on its own. Delivery minted the shadow with the origin's id. If that id already existed, `mint` reverted and the original stayed locked.
+
+**Fix:** a shadow is minted with the destination's next id and stores `originBoxId`. The return message uses that stored id, so the original unlocks even when both chains already had a box with the same number.
+
+## M-03 — A locked box can still be transferred
+
+**Severity:** Medium
+
+`isLocked` blocked deposits and withdrawals, not `transferFrom`. The locked original and the shadow could both be sold, as two NFTs for one set of assets.
+
+**Fix:** `_update` reverts while a box is locked, so the original cannot move. Burning it is still allowed. The shadow is the box that can change hands, and returning it hands the original to that holder.
+
+## L-02 — Delivery gas is fixed at 500k
+
+**Severity:** Low
+
+`GAS_LIMIT` was 500_000 for every message. A full box writes on the order of 80 storage slots, which does not fit in that budget, so delivery of a full box could revert and leave the original locked.
+
+**Fix:** `deliveryGasLimit` starts at 800_000 and adds 60_000 per listed asset. The quote and the send use that value.
+
+## L-03 — Bridge receiver is not checked
+
+**Severity:** Low
+
+`bridgeBox` accepted the zero address. Delivery would then revert, after the original had been locked.
+
+**Fix:** a zero receiver reverts with `InvalidAddress` before the message is sent. Delivery rejects a zero receiver as well.
+
+## I-02 — `DebugLog` events in production code
+
+**Severity:** Informational
+
+Bridge and return emitted `DebugLog` for troubleshooting. Those events are removed.
+
 ## Residual risk
 
 - A token that lies about `balanceOf` can still be credited for a balance increase that is not a real deposit. The user chose that token.
 - A fee-on-transfer token charges again on withdraw. The box pays the recorded net amount; the token may deliver less to the wallet. The contract balance stays consistent with the books.
-- The Wormhole relayer and the trusted remote contract are privileged. A bad trusted registration can still deliver a shadow box.
-- Shadow boxes copy the asset list. They do not move the underlying tokens. Spending a shadow box's ERC-20 on the destination chain is only possible if that chain's contract actually holds the tokens. That custody split is the bridge model, not something this patch changes.
+- The Wormhole relayer and the trusted remote contract are privileged. A bad trusted registration can still deliver a message.
+- The shadow is burned when the return message is accepted by the relayer, before the origin has executed it. If that delivery never lands, the shadow is gone and the original stays locked until the same message is delivered.
+- `ParadoxToken` and `SchrodingerCatNFT` can be minted by anyone. That is acceptable for these testnet demo tokens.
 - The addresses in the README run the previous bytecode.

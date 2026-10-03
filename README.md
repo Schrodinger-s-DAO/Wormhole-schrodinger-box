@@ -46,7 +46,9 @@ npx hardhat test --network sepolia
 
 ## Bridge Behavior
 
-- Bridging locks the original box on the source chain and recreates a shadow box with identical state on the target chain (same `boxId`). Both boxes coexist until the bridge completes or is reverted, reproducing the Schrödinger-style simultaneous states.
+- Bridging locks the original box. That locked box cannot be transferred, and its assets stay on the chain where they were deposited.
+- The destination mints a shadow with its own token id and records `originBoxId`. The shadow can be transferred. It cannot deposit or withdraw.
+- Sending the shadow home burns it, unlocks the original, and gives that original to the account that sent it home. The local tests in `test/SchrodingerBox.bridge.test.js` run this round trip against a mock relayer.
 
 ## Deployments
 
@@ -63,7 +65,7 @@ Addresses recorded for the public testnet deployments. Source verification on th
 | Sepolia | ParadoxToken | [`0x84E17681cb4A5A8f89BF068a61594FF8699577c7`](https://sepolia.etherscan.io/address/0x84E17681cb4A5A8f89BF068a61594FF8699577c7) |
 | Sepolia | SchrodingerCatNFT | [`0x0A9902718f5b0fA61E390746F3d2490211712Fed`](https://sepolia.etherscan.io/address/0x0A9902718f5b0fA61E390746F3d2490211712Fed) |
 
-The same addresses are in `deployed_contracts.json`. These deployments predate the settlement fixes in this repository. A new deployment is required before the fixes are live.
+The same addresses are in `deployed_contracts.json`. These deployments predate the settlement fixes and the bridge fixes in this repository. A new deployment is required before either is live.
 
 ## Environments & Deployment
 

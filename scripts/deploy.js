@@ -19,12 +19,12 @@ async function main() {
   const network = hre.network.name;
   if (network === "sepolia") {
     wormholeRelayerAddress = process.env.WORMHOLE_RELAYER_SEPOLIA;
-    chainId = 10002; // Sepolia chain ID in Wormhole
-  } else if (network === "holesky") {
-    wormholeRelayerAddress = process.env.WORMHOLE_RELAYER_HOLESKY;
-    chainId = 10004; // Holesky chain ID in Wormhole
+    chainId = 10002; // Ethereum Sepolia
+  } else if (network === "baseSepolia") {
+    wormholeRelayerAddress = process.env.WORMHOLE_RELAYER_BASE_SEPOLIA;
+    chainId = 10004; // Base Sepolia
   } else {
-    throw new Error("Network not supported");
+    throw new Error("Network not supported. Use sepolia or baseSepolia.");
   }
 
   console.log(`Deploying on ${network} with Wormhole chain ID: ${chainId}`);
