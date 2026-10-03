@@ -608,8 +608,11 @@ function chainName(wormholeId) {
 }
 
 function otherSideText(item) {
-  if (item.original) return `Goes to ${otherNetwork(state.networkKey).name}`;
-  return `Home is ${chainName(item.originChain)} · original #${item.originBoxId}`;
+  if (!item.original) return `Home is ${chainName(item.originChain)} · original #${item.originBoxId}`;
+  const flight = flightFor(item);
+  if (flight) return `Going to ${NETWORKS[flight.targetKey].name}`;
+  if (item.locked) return `Shadow on ${otherNetwork(state.networkKey).name}`;
+  return "";
 }
 
 function flightFor(item) {
@@ -727,6 +730,8 @@ function renderBoxes() {
     head.append(el("span", "id", `#${item.id}`), el("span", `tag ${tagKind(item)}`, tagText(item)));
     card.append(head);
     card.append(el("div", "", statusLine(item)));
+    const side = otherSideText(item);
+    if (side && !flightFor(item)) card.append(el("div", "hint", side));
     const owned = item.original && item.locked ? receiverFor(item) : item.owner;
     const open = state.openAddress === item.id.toString();
     const shown = !owned ? "this contract" : open ? owned : (same(owned, state.account) ? "you" : short(owned));
@@ -776,6 +781,11 @@ function syncSelection() {
   if (!item) {
     if (title) title.textContent = "Select a box";
     hint.textContent = raw ? "No box with that id on this network." : "Pick a box on the left.";
+    const side = $("box-side");
+    if (side) {
+      side.hidden = true;
+      side.textContent = "";
+    }
     owner.textContent = "";
     if (label) label.hidden = true;
     renderContents();
@@ -784,6 +794,13 @@ function syncSelection() {
   }
   if (title) title.textContent = `Box #${item.id}`;
   hint.textContent = statusLine(item, true);
+  const side = $("box-side");
+  const extra = otherSideText(item);
+  if (side) {
+    const show = Boolean(extra) && !flightFor(item);
+    side.hidden = !show;
+    side.textContent = show ? extra : "";
+  }
   owner.textContent = ownerText(item);
   if (label) label.hidden = false;
   renderContents();
