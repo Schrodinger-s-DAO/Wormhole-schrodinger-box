@@ -1299,9 +1299,16 @@ async function simulateDeliver(vaa) {
 
 const READD_KEY = "sb-readd-chain";
 
+function walletText(error) {
+  return [error?.message, error?.data?.message, walletReason(error)].filter(Boolean).join(" ");
+}
+
 function isEip1559Refusal(error) {
-  const text = [error?.message, error?.data?.message, walletReason(error)].filter(Boolean).join(" ");
-  return /does not support EIP-1559/i.test(text);
+  return /does not support EIP-1559/i.test(walletText(error));
+}
+
+function isSponsoredRefusal(error) {
+  return /EIP-7702|gas included|sponsored/i.test(walletText(error));
 }
 
 async function addCurrentChain() {
@@ -1318,30 +1325,40 @@ async function addCurrentChain() {
   });
 }
 
+async function requestTx(params) {
+  return window.ethereum.request({ method: "eth_sendTransaction", params: [params] });
+}
+
 async function sendDeliver(from, data, gas, gasPrice) {
-  if (sessionStorage.getItem(READD_KEY) === network().key) {
+  const fresh = sessionStorage.getItem(READD_KEY) === network().key;
+  if (fresh) {
     await addCurrentChain();
     sessionStorage.removeItem(READD_KEY);
   }
-  const base = {
+  const fee = await provider().getFeeData();
+  let maxFee = fee.maxFeePerGas ?? gasPrice;
+  let priority = fee.maxPriorityFeePerGas ?? gasPrice;
+  if (priority > maxFee) priority = maxFee;
+  const common = {
     from,
     to: network().contracts.mailbox,
     data,
     value: "0x0",
     gas: ethers.toQuantity(gas)
   };
-  const legacy = { ...base, type: "0x0", gasPrice: ethers.toQuantity(gasPrice) };
+  const priced = {
+    ...common,
+    maxFeePerGas: ethers.toQuantity(maxFee),
+    maxPriorityFeePerGas: ethers.toQuantity(priority)
+  };
+  const legacy = { ...common, type: "0x0", gasPrice: ethers.toQuantity(gasPrice) };
+  if (fresh) return requestTx(priced);
   try {
-    return await window.ethereum.request({ method: "eth_sendTransaction", params: [legacy] });
+    return await requestTx(legacy);
   } catch (error) {
-    if (!isEip1559Refusal(error)) throw error;
-  }
-  try {
-    return await window.ethereum.request({ method: "eth_sendTransaction", params: [base] });
-  } catch (error) {
-    if (!isEip1559Refusal(error)) throw error;
+    if (!isEip1559Refusal(error) && !isSponsoredRefusal(error)) throw error;
     sessionStorage.setItem(READD_KEY, network().key);
-    throw invalid(`Remove ${network().name} from the wallet, then press Deliver again. The page will add it back.`);
+    throw invalid(`Remove ${network().name} from the wallet, then press Deliver again. The page will add it back. Pay the fee in ETH.`);
   }
 }
 
