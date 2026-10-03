@@ -59,6 +59,7 @@ const state = {
   refreshing: false,
   refreshQueued: false,
   boxScope: "mine",
+  messages: [],
   providers: {}
 };
 
@@ -424,6 +425,7 @@ async function refreshOnce() {
   }
   showWorkspace();
   seedAddresses();
+  state.messages = await findMessages();
   await Promise.all([refreshChain(), refreshBoxes(), refreshAssets(), refreshOwner()]);
   await refreshDelivery();
 }
@@ -697,7 +699,12 @@ function syncSelection() {
     return;
   }
   const other = otherNetwork(state.networkKey).name;
-  if (item.original && item.locked) hint.textContent = `Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
+  if (item.original && item.locked) {
+    const inflight = currentPending().some((message) => message.sourceKey === state.networkKey);
+    hint.textContent = inflight
+      ? `Locked. Owned by ${targetLabel(item)}. The shadow is not on ${other} yet, so it cannot be sent or destroyed.`
+      : `Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
+  }
   else if (item.original) hint.textContent = same(item.owner, state.account)
     ? `Open. Lock it and the shadow goes to ${other}. You choose who receives it.`
     : `Open original in another wallet. Its shadow goes to ${other}.`;
@@ -712,14 +719,10 @@ function paintForms() {
   const openMine = Boolean(item && item.original && !item.locked && same(item.owner, state.account));
   const shadowMine = Boolean(item && !item.original && same(item.owner, state.account));
   $("form-bridge").hidden = waiting || !openMine;
-  $("form-return").hidden = waiting || !shadowMine;
+  $("form-return").hidden = !shadowMine;
   $("form-transfer").hidden = !shadowMine;
   const lockedHere = Boolean(item && item.original && item.locked);
   $("timeline").hidden = !waiting && !lockedHere;
-  if (!waiting && lockedHere) {
-    paintSteps("waiting");
-    $("delivery-status").textContent = `Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
-  }
 }
 
 function selectedItem() {
@@ -728,10 +731,82 @@ function selectedItem() {
 }
 
 function currentPending() {
-  return loadPending().filter((item) => {
+  return state.messages;
+}
+
+function networkByWormhole(id) {
+  return Object.values(NETWORKS).find((net) => net.wormholeId === Number(id)) || null;
+}
+
+async function findMessages() {
+  const pending = [];
+  const delivered = new Set();
+  for (const sourceKey of Object.keys(NETWORKS)) {
+    const source = NETWORKS[sourceKey];
+    if (!source.contracts?.mailbox) continue;
+    const sourceProvider = providerFor(source);
+    let latest;
+    try {
+      latest = await sourceProvider.getBlockNumber();
+    } catch {
+      continue;
+    }
+    const mail = new ethers.Contract(source.contracts.mailbox, mailboxAbi, sourceProvider);
+    let published = [];
+    try {
+      published = await mail.queryFilter(mail.filters.Published(), Math.max(0, latest - 45000));
+    } catch {
+      continue;
+    }
+    for (const event of published) {
+      const target = networkByWormhole(event.args.targetChain);
+      if (!target?.contracts?.mailbox) continue;
+      const sequence = event.args.sequence.toString();
+      const id = `${source.wormholeId}-${sequence}`;
+      let done = false;
+      try {
+        const destProvider = providerFor(target);
+        const destLatest = await destProvider.getBlockNumber();
+        const dest = new ethers.Contract(target.contracts.mailbox, mailboxAbi, destProvider);
+        const hits = await dest.queryFilter(
+          dest.filters.Delivered(source.wormholeId, event.args.sequence),
+          Math.max(0, destLatest - 45000)
+        );
+        done = hits.length > 0;
+      } catch {
+        done = false;
+      }
+      if (done) {
+        delivered.add(id);
+        continue;
+      }
+      let startedAt = null;
+      try {
+        const block = await event.getBlock();
+        startedAt = Number(block.timestamp) * 1000;
+      } catch {
+        startedAt = null;
+      }
+      const saved = loadPending().find((item) => item.id === id);
+      pending.push({
+        id,
+        sourceKey,
+        targetKey: target.key,
+        sourceChain: source.wormholeId,
+        sequence,
+        emitter: source.contracts.mailbox,
+        startedAt: saved?.startedAt || startedAt
+      });
+    }
+  }
+  const seen = new Set(pending.map((item) => item.id));
+  for (const item of loadPending()) {
     const source = NETWORKS[item.sourceKey];
-    return source?.contracts?.mailbox && same(source.contracts.mailbox, item.emitter);
-  });
+    if (!source?.contracts?.mailbox || !same(source.contracts.mailbox, item.emitter)) continue;
+    if (seen.has(item.id) || delivered.has(item.id)) continue;
+    pending.push(item);
+  }
+  return pending;
 }
 
 const BRIDGE_WAIT_MS = 18 * 60 * 1000;
@@ -746,7 +821,7 @@ function waitCopy(item) {
 
 function paintSteps(phase) {
   const steps = ["step-lock", "step-wait", "step-sign", "step-done"];
-  const current = { waiting: 1, signed: 3 }[phase] ?? -1;
+  const current = { waiting: 1, signed: 3, out: 4 }[phase] ?? -1;
   steps.forEach((id, index) => {
     const node = $(id);
     node.className = index < current ? "done" : index === current ? "now" : "";
@@ -755,9 +830,13 @@ function paintSteps(phase) {
 
 function stageCopy(item, signed) {
   const target = NETWORKS[item.targetKey].name;
-  if (!signed) return waitCopy(item);
-  if (item.targetKey === state.networkKey) return `Signed. You are on ${target}. Press Deliver here.`;
-  return `Signed. Deliver on ${target}. This page cannot do it.`;
+  if (!signed) return `${waitCopy(item)} The shadow does not exist yet, so it cannot be sent or destroyed.`;
+  if (item.targetKey === state.networkKey) {
+    let line = `Signed. You are on ${target}. Press Deliver here. That creates the shadow.`;
+    if (state.account && state.ethBalance === 0n) line += ` This wallet has no ETH on ${target} for gas.`;
+    return line;
+  }
+  return `Signed. Deliver on ${target}. This page cannot do it. The shadow does not exist until then, so it cannot be sent or destroyed.`;
 }
 
 function renderContents() {
@@ -1066,8 +1145,10 @@ async function refreshDelivery() {
     $("step-done").textContent = `Deliver on ${otherNetwork(state.networkKey).name}`;
     const locked = selectedItem();
     if (locked?.original && locked.locked) {
-      paintSteps("waiting");
-      status.textContent = `Locked. Owned by ${targetLabel(locked)}. That wallet receives this folder when the shadow comes home.`;
+      paintSteps("out");
+      $("step-done").textContent = "Shadow is live";
+      $("bridge-title").textContent = "Shadow is live";
+      status.textContent = `Locked. Owned by ${targetLabel(locked)}. The shadow is on ${otherNetwork(state.networkKey).name}. Send it or destroy it there.`;
     } else {
       status.textContent = "No message waiting.";
     }
@@ -1117,15 +1198,23 @@ async function onDeliver() {
   await run("Deliver", async () => {
     const vaa = state.readyVaa;
     if (!vaa) throw invalid("The signed message is not here yet");
-    await simulateDeliver(vaa);
     const signer = await requireSigner();
+    await simulateDeliver(vaa);
+    const from = await signer.getAddress();
+    const reader = new ethers.Contract(network().contracts.mailbox, mailboxAbi, provider());
+    let gas = 1_200_000n;
+    try {
+      gas = ((await reader.deliver.estimateGas(vaa, { from })) * 3n) / 2n;
+    } catch {
+      gas = 1_200_000n;
+    }
     const mailbox = new ethers.Contract(network().contracts.mailbox, mailboxAbi, signer);
     try {
-      await send(mailbox.deliver(vaa));
+      await send(mailbox.deliver(vaa, { gasLimit: gas }));
     } catch (error) {
       const raw = error.shortMessage || error.message || "";
       if (/could not coalesce|missing revert data/i.test(raw)) {
-        throw invalid("The message is still signed. Nothing is stuck. The wallet could not send it.");
+        throw invalid(`The wallet could not send the transaction. It needs ETH on ${network().name}.`);
       }
       const reason = decodedReason(error);
       if (reason) throw invalid(reason);
