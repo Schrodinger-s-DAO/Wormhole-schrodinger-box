@@ -181,10 +181,11 @@ main { padding: 16px 0 48px; display: grid; gap: 14px; }
 .panel { padding: 14px; background: transparent; }
 .card { background: var(--card); }
 .layout { display: grid; gap: 14px; }
-.box-list { display: grid; gap: 8px; margin-top: 10px; max-height: 460px; overflow: auto; }
+.box-list { display: grid; gap: 8px; margin-top: 10px; max-height: 460px; overflow-x: hidden; overflow-y: auto; }
 
 .box {
   width: 100%;
+  min-width: 0;
   text-align: left;
   color: inherit;
   background: var(--card);
@@ -194,6 +195,7 @@ main { padding: 16px 0 48px; display: grid; gap: 14px; }
   display: grid;
   gap: 3px;
 }
+.addr { overflow-wrap: anywhere; cursor: pointer; }
 .box.on { border-color: var(--lime); }
 .box .id { font-family: "Instrument Serif", serif; font-size: 22px; }
 .tag {

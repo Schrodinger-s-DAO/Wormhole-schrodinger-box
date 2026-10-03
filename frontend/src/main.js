@@ -61,6 +61,7 @@ const state = {
   boxScope: "mine",
   messages: [],
   vaaCache: {},
+  openAddress: null,
   providers: {}
 };
 
@@ -705,10 +706,22 @@ function renderBoxes() {
     const head = el("div", "row");
     head.append(el("span", "id", `#${item.id}`), el("span", `tag ${tagKind(item)}`, tagText(item)));
     card.append(head);
-    const who = item.original && item.locked
-      ? `Owned by ${targetLabel(item)}`
-      : held ? "this contract" : mine ? "you" : short(item.owner);
-    card.append(el("div", "", who));
+    const ownerAddress = item.original && item.locked ? receiverFor(item) : null;
+    if (ownerAddress) {
+      const open = state.openAddress === item.id.toString();
+      const shown = open ? ownerAddress : short(ownerAddress);
+      const line = el("div", "addr", `Owned by ${shown} on ${otherNetwork(state.networkKey).name}`);
+      line.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.openAddress = open ? null : item.id.toString();
+        renderBoxes();
+      });
+      card.append(line);
+    } else {
+      const who = held ? "this contract" : mine ? "you" : short(item.owner);
+      card.append(el("div", "", who));
+    }
     if (item.tokens.length === 0 && item.nfts.length === 0) card.append(el("div", "hint", "empty"));
     for (const token of item.tokens) card.append(el("div", "", `${tokenLabel(token.address)} ${formatAmount(token.amount)}`));
     for (const nft of item.nfts) card.append(el("div", "", `${nftLabel(nft.contract)} #${nft.id}`));
@@ -1284,6 +1297,54 @@ async function simulateDeliver(vaa) {
   }
 }
 
+const READD_KEY = "sb-readd-chain";
+
+function isEip1559Refusal(error) {
+  const text = [error?.message, error?.data?.message, walletReason(error)].filter(Boolean).join(" ");
+  return /does not support EIP-1559/i.test(text);
+}
+
+async function addCurrentChain() {
+  const current = network();
+  await window.ethereum.request({
+    method: "wallet_addEthereumChain",
+    params: [{
+      chainId: current.hex,
+      chainName: current.name,
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: [current.rpc],
+      blockExplorerUrls: [current.explorer]
+    }]
+  });
+}
+
+async function sendDeliver(from, data, gas, gasPrice) {
+  if (sessionStorage.getItem(READD_KEY) === network().key) {
+    await addCurrentChain();
+    sessionStorage.removeItem(READD_KEY);
+  }
+  const base = {
+    from,
+    to: network().contracts.mailbox,
+    data,
+    value: "0x0",
+    gas: ethers.toQuantity(gas)
+  };
+  const legacy = { ...base, type: "0x0", gasPrice: ethers.toQuantity(gasPrice) };
+  try {
+    return await window.ethereum.request({ method: "eth_sendTransaction", params: [legacy] });
+  } catch (error) {
+    if (!isEip1559Refusal(error)) throw error;
+  }
+  try {
+    return await window.ethereum.request({ method: "eth_sendTransaction", params: [base] });
+  } catch (error) {
+    if (!isEip1559Refusal(error)) throw error;
+    sessionStorage.setItem(READD_KEY, network().key);
+    throw invalid(`Remove ${network().name} from the wallet, then press Deliver again. The page will add it back.`);
+  }
+}
+
 async function onDeliver() {
   await run("Deliver", async () => {
     const vaa = state.readyVaa;
@@ -1301,17 +1362,7 @@ async function onDeliver() {
       throw invalid(`This wallet has ${ethers.formatEther(balance)} ETH on ${network().name}. Delivery needs about ${ethers.formatEther(cost)} ETH for gas.`);
     }
     const data = mailbox.interface.encodeFunctionData("deliver", [vaa]);
-    const hash = await window.ethereum.request({
-      method: "eth_sendTransaction",
-      params: [{
-        from,
-        to: network().contracts.mailbox,
-        data,
-        value: "0x0",
-        gas: ethers.toQuantity(gas),
-        gasPrice: ethers.toQuantity(gasPrice)
-      }]
-    });
+    const hash = await sendDeliver(from, data, gas, gasPrice);
     log(`tx ${hash}`);
     const receipt = await provider().waitForTransaction(hash);
     if (!receipt || receipt.status === 0) throw invalid("The delivery transaction was mined and failed.");
