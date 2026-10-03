@@ -133,7 +133,7 @@ async function kept(signer, address) {
 
 async function deployChain(chain, signer) {
   const previous = readLive()[chain.key] || {};
-  if (previous.box && previous.mailbox) {
+  if (!process.env.FORCE_REDEPLOY && previous.box && previous.mailbox) {
     const [boxCode, mailboxCode] = await Promise.all([
       signer.provider.getCode(previous.box),
       signer.provider.getCode(previous.mailbox)
@@ -233,6 +233,20 @@ async function wire(sepoliaSigner, baseSigner, sepolia, base) {
   if (fee !== 0n || back !== 0n) {
     throw new Error("quote did not return the core fee of 0; the mailbox is not wired to core");
   }
+
+  await freeze(sepoliaBox, "sepolia box");
+  await freeze(baseBox, "base box");
+  await freeze(sepoliaMail, "sepolia mailbox");
+  await freeze(baseMail, "base mailbox");
+}
+
+async function freeze(contract, label) {
+  if (await contract.configFrozen()) {
+    console.log(`  ${label} already frozen`);
+    return;
+  }
+  await send(contract.runner, `${label} freeze`, (fees) => contract.freezeConfig(fees));
+  console.log(`  ${label} frozen`);
 }
 
 async function mintPractice(signer, contracts, second) {

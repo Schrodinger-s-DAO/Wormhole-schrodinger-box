@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./ISealable.sol";
 
 /**
  * @notice Interface for Wormhole Relayer
@@ -40,7 +41,12 @@ interface IWormholeReceiver {
     ) external payable;
 }
 
-contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormholeReceiver {
+interface IERC4906 {
+    event MetadataUpdate(uint256 _tokenId);
+    event BatchMetadataUpdate(uint256 _fromTokenId, uint256 _toTokenId);
+}
+
+contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormholeReceiver, ISealable, IERC4906 {
     using SafeERC20 for IERC20;
 
     /// @dev Caps each box so a deposit loop cannot be grown without bound.
@@ -73,11 +79,21 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     uint256 public mintingFee;
     uint256 private _tokenIdCounter;
 
-    /// @dev Base gas for a delivery, plus one increment per listed asset.
+    /// @dev Base gas figure used only by the price quote, plus one increment per listed asset.
     ///      A full box writes about 80 storage slots; 500k is not enough for that.
+    ///      The mailbox does not forward this number as a stipend. Whoever calls `deliver` pays the destination gas.
     uint256 public constant BASE_DELIVERY_GAS = 800_000;
     uint256 public constant GAS_PER_ASSET = 60_000;
-    uint256 public constant DEFAULT_WORMHOLE_FEE = 0.01 ether; // Default fee for testnets
+
+    /// @dev Set by `freezeConfig`. After that, trusted peers cannot be replaced.
+    bool public configFrozen;
+
+    struct Seal {
+        bool closed;
+        uint256 state;
+    }
+
+    mapping(uint256 => Seal) private _seals;
 
     // Events
     event BoxMinted(address indexed owner, uint256 indexed boxId);
@@ -91,6 +107,9 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     event MintingFeeUpdated(uint256 newFee);
     event FeeCollectorUpdated(address newFeeCollector);
     event TrustedContractUpdated(uint16 chainId, bytes32 contractAddress);
+    event ConfigFrozenSet();
+    event Sealed(uint256 indexed boxId, uint256 state);
+    event Unsealed(uint256 indexed boxId, uint256 state);
     event BridgeError(string reason);
 
     // Errors
@@ -115,6 +134,11 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     error DuplicateAsset();
     error AssetNotReceived();
     error UnknownAction();
+    error ConfigFrozen();
+    error BoxSealed();
+    error AlreadySealed();
+    error NotSealed();
+    error NonceMismatch();
 
     constructor(
         address _wormholeRelayer,
@@ -157,8 +181,56 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     /// @notice Registers the box contract trusted on another chain.
     /// @param _contractAddress Target contract, encoded as bytes32.
     function setTrustedContract(uint16 _chainId, bytes32 _contractAddress) external onlyOwner {
+        if (configFrozen) revert ConfigFrozen();
         trustedContracts[_chainId] = _contractAddress;
         emit TrustedContractUpdated(_chainId, _contractAddress);
+    }
+
+    /// @notice Stops later changes to the trusted box on each chain. Irreversible.
+    function freezeConfig() external onlyOwner {
+        if (configFrozen) revert ConfigFrozen();
+        configFrozen = true;
+        emit ConfigFrozenSet();
+    }
+
+    /// @notice Closes the box. Deposits and withdrawals revert until `unseal`.
+    function seal(uint256 boxId) external {
+        _requireOpenOriginal(boxId);
+        Seal storage sealInfo = _seals[boxId];
+        if (sealInfo.closed) revert AlreadySealed();
+        sealInfo.closed = true;
+        sealInfo.state += 1;
+        emit Sealed(boxId, sealInfo.state);
+        emit MetadataUpdate(boxId);
+    }
+
+    /// @notice Opens the box again. The seal counter still increases.
+    function unseal(uint256 boxId) external {
+        _requireOpenOriginal(boxId);
+        Seal storage sealInfo = _seals[boxId];
+        if (!sealInfo.closed) revert NotSealed();
+        sealInfo.closed = false;
+        sealInfo.state += 1;
+        emit Unsealed(boxId, sealInfo.state);
+        emit MetadataUpdate(boxId);
+    }
+
+    /// @inheritdoc ISealable
+    function isSealed(uint256 tokenId) public view returns (bool) {
+        _requireOwned(tokenId);
+        if (!boxes[tokenId].isOriginal) return true;
+        return _seals[tokenId].closed;
+    }
+
+    /// @inheritdoc ISealable
+    function sealState(uint256 tokenId) public view returns (uint256) {
+        _requireOwned(tokenId);
+        return _seals[tokenId].state;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(ISealable).interfaceId || interfaceId == 0x49064906
+            || super.supportsInterface(interfaceId);
     }
 
     /// @notice Mints a box. Excess ETH above the minting fee is returned with a call, not `transfer`.
@@ -201,9 +273,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         address token,
         uint256 amount
     ) external nonReentrant {
-        if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
-        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
-        if (boxes[boxId].isLocked) revert BoxLocked();
+        _requireOpenOriginal(boxId);
+        if (_seals[boxId].closed) revert BoxSealed();
         if (token == address(0)) revert InvalidAddress();
         if (amount == 0) revert ZeroAmount();
 
@@ -230,9 +301,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         uint256 boxId, 
         address token
     ) external nonReentrant {
-        if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
-        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
-        if (boxes[boxId].isLocked) revert BoxLocked();
+        _requireOpenOriginal(boxId);
+        if (_seals[boxId].closed) revert BoxSealed();
 
         for (uint i = 0; i < boxes[boxId].erc20Tokens.length; i++) {
             if (boxes[boxId].erc20Tokens[i] == token) {
@@ -260,9 +330,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         address nftContract,
         uint256 tokenId
     ) external nonReentrant {
-        if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
-        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
-        if (boxes[boxId].isLocked) revert BoxLocked();
+        _requireOpenOriginal(boxId);
+        if (_seals[boxId].closed) revert BoxSealed();
         if (nftContract == address(0)) revert InvalidAddress();
         if (boxes[boxId].erc721Contracts.length >= MAX_ASSETS) revert TooManyAssets();
 
@@ -288,9 +357,8 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
         address nftContract, 
         uint256 tokenId
     ) external nonReentrant {
-        if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
-        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
-        if (boxes[boxId].isLocked) revert BoxLocked();
+        _requireOpenOriginal(boxId);
+        if (_seals[boxId].closed) revert BoxSealed();
 
         for (uint i = 0; i < boxes[boxId].erc721Contracts.length; i++) {
             if (boxes[boxId].erc721Contracts[i] == nftContract && 
@@ -323,18 +391,14 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
     }
 
     /// @notice Quotes the Wormhole delivery fee for a box with `assetCount` listed assets.
+    /// @dev If the relayer cannot price the message, this reverts. There is no fallback fee.
     function getWormholeFee(uint16 targetChain, uint256 assetCount) public view returns (uint256) {
-        // Improved fee calculation with fallback
-        try wormholeRelayer.quoteEVMDeliveryPrice(
+        (uint256 deliveryPrice,) = wormholeRelayer.quoteEVMDeliveryPrice(
             targetChain,
             0, // No receiver value
             deliveryGasLimit(assetCount)
-        ) returns (uint256 deliveryPrice, uint256) {
-            return deliveryPrice;
-        } catch {
-            // Fallback for unsupported testnets
-            return DEFAULT_WORMHOLE_FEE;
-        }
+        );
+        return deliveryPrice;
     }
 
     /// @dev Unique nonce mixed into each Wormhole payload.
@@ -495,7 +559,9 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
             boxData.originBoxId = boxId;
             boxData.messageNonce = messageNonce;
             boxes[localId] = boxData;
-            _safeMint(receiver, localId);
+            // `_mint`, not `_safeMint`. A contract receiver with no `onERC721Received`
+            // must not revert delivery, or the original stays locked with no exit.
+            _mint(receiver, localId);
 
             emit BoxReceived(localId, receiver);
         } else if (action == 2) {
@@ -503,8 +569,12 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
             Box storage original = boxes[boxId];
             if (!original.isOriginal || original.originChain != chainId) revert NotOriginalBox();
             if (!original.isLocked) revert BoxNotLocked();
+            // The shadow still carries the nonce saved when this original was bridged.
+            if (boxData.messageNonce != original.messageNonce) revert NonceMismatch();
 
             original.isLocked = false;
+            _seals[boxId].state += 1;
+            emit MetadataUpdate(boxId);
             address holder = ownerOf(boxId);
             if (holder != receiver) {
                 _transfer(holder, receiver, boxId);
@@ -522,6 +592,13 @@ contract SchrodingerBox is ERC721Enumerable, Ownable, ReentrancyGuard, IWormhole
             revert BoxLocked();
         }
         return super._update(to, tokenId, auth);
+    }
+
+    /// @dev Caller owns an original box that is not locked in a bridge.
+    function _requireOpenOriginal(uint256 boxId) internal view {
+        if (ownerOf(boxId) != msg.sender) revert NotBoxOwner();
+        if (!boxes[boxId].isOriginal) revert NotOriginalBox();
+        if (boxes[boxId].isLocked) revert BoxLocked();
     }
 
     /// @dev Pulls `amount` and returns the balance that actually arrived.

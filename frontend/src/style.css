@@ -246,6 +246,8 @@ main { padding: 16px 0 48px; display: grid; gap: 14px; }
 .faucet { margin-top: 10px; }
 .inline { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
 .inline label { min-width: 120px; flex: 1; }
+.put-line { display: flex; gap: 8px; align-items: center; }
+.put-line input { flex: 1; min-width: 0; }
 .lookup { display: flex; gap: 8px; align-items: end; margin-top: 12px; }
 .lookup label { flex: 1; }
 

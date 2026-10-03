@@ -33,6 +33,11 @@ const ERRORS = {
   DuplicateAsset: "That NFT is already in the box",
   AssetNotReceived: "The NFT never arrived",
   UnknownAction: "Unknown bridge action",
+  BoxSealed: "This box is sealed. Open it before adding or removing anything",
+  AlreadySealed: "This box is already sealed",
+  NotSealed: "This box is already open",
+  NonceMismatch: "This return is not the bridge that locked the box",
+  ConfigFrozen: "That configuration is frozen",
   OwnableUnauthorizedAccount: "Only the owner can do that",
   ERC721InsufficientApproval: "Approve the NFT first",
   ERC20InsufficientAllowance: "Approve the token first",
@@ -569,9 +574,23 @@ async function refreshBoxes() {
       nfts: details.erc721Contracts.map((contract, i) => ({
         contract,
         id: details.erc721TokenIds[i].toString()
-      }))
+      })),
+      sealed: null,
+      sealState: null
     });
   }
+  await Promise.all(items.map(async (item) => {
+    try {
+      const [sealed, sealState] = await Promise.all([
+        box.isSealed(item.id),
+        box.sealState(item.id)
+      ]);
+      item.sealed = sealed;
+      item.sealState = sealState;
+    } catch {
+      item.sealed = null;
+    }
+  }));
   const lockedIds = items.filter((item) => item.original && item.locked).map((item) => item.id);
   const targets = await shadowTargets(lockedIds);
   for (const item of items) {
@@ -632,6 +651,7 @@ function statusLine(item, detailed) {
   }
   if (!item.original) return `Shadow of original #${item.originBoxId} on ${chainName(item.originChain)}`;
   if (item.locked) return `Locked on ${network().name}`;
+  if (item.sealed) return `Sealed on ${network().name}`;
   return `Open on ${network().name}`;
 }
 
@@ -812,10 +832,21 @@ function paintForms() {
   const openMine = Boolean(item && item.original && !item.locked && same(item.owner, state.account));
   const shadowMine = Boolean(item && !item.original && same(item.owner, state.account));
   const yours = openMine || shadowMine;
-  $("fill-tools").hidden = !openMine;
-  $("more-assets").hidden = !openMine;
+  const sealed = Boolean(openMine && item.sealed);
+  $("fill-tools").hidden = !openMine || sealed;
+  $("more-assets").hidden = !openMine || sealed;
   $("form-return").hidden = !shadowMine;
   $("form-transfer").hidden = !yours;
+  const sealForm = $("form-seal");
+  if (openMine && item.sealed !== null) {
+    sealForm.hidden = false;
+    $("seal-hint").textContent = sealed
+      ? "Sealed. Nothing can be added or removed until you open it. Listing it in a trade keeps this seal."
+      : "Seal it before you list this box in a trade. A deposit or a withdrawal has to wait until it is open.";
+    $("seal-submit").textContent = sealed ? "Unseal" : "Seal this box";
+  } else {
+    sealForm.hidden = true;
+  }
   if (yours) {
     $("transfer-title").textContent = shadowMine ? "Move the shadow" : "Move this box";
     $("transfer-hint").textContent = shadowMine
@@ -1465,6 +1496,16 @@ async function onWithdrawNft() {
   });
 }
 
+async function onSeal() {
+  await run("Seal", async () => {
+    const signer = await requireSigner();
+    const box = currentBox(signer);
+    const id = selectedId();
+    const sealed = await box.isSealed(id);
+    await send(sealed ? box.unseal(id) : box.seal(id));
+  });
+}
+
 async function onTransfer() {
   await run("Transfer", async () => {
     const signer = await requireSigner();
@@ -1585,6 +1626,7 @@ function bind() {
     "form-deposit-nft": onDepositNft,
     "form-withdraw-nft": onWithdrawNft,
     "form-put-par": onPutPar,
+    "form-seal": onSeal,
     "form-transfer": onTransfer,
     "form-bridge": onBridge,
     "form-return": onReturn,

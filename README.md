@@ -52,20 +52,14 @@ npx hardhat test --network sepolia
 
 ## Deployments
 
-Addresses recorded for the public testnet deployments. Source verification on the explorer is separate from this list.
+Live testnet pair, deployed 3 October 2026. Peers are set and `freezeConfig` has been called. Source is not verified on the explorers yet. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`.
 
 | Network | Contract | Address |
 |---------|----------|---------|
-| Holesky | SchrodingerBox | [`0xE3c0C995fdC9C8B53383adB95f7816d4b3d657f5`](https://holesky.etherscan.io/address/0xE3c0C995fdC9C8B53383adB95f7816d4b3d657f5) |
-| Holesky | FeeCollector | [`0x7368A8DA33cad6Db111686A130687f64E4df39c7`](https://holesky.etherscan.io/address/0x7368A8DA33cad6Db111686A130687f64E4df39c7) |
-| Holesky | ParadoxToken | [`0xC23Cc5B5a56325b78A998678C3aB3b4cf299E0DC`](https://holesky.etherscan.io/address/0xC23Cc5B5a56325b78A998678C3aB3b4cf299E0DC) |
-| Holesky | SchrodingerCatNFT | [`0x463aA9fa9CC882306b81440cf16845170Fc1b843`](https://holesky.etherscan.io/address/0x463aA9fa9CC882306b81440cf16845170Fc1b843) |
-| Sepolia | SchrodingerBox | [`0xc858b43357b6D8D507ad8E069847b5CFb0181a71`](https://sepolia.etherscan.io/address/0xc858b43357b6D8D507ad8E069847b5CFb0181a71) |
-| Sepolia | FeeCollector | [`0x25305962f8EE3e349F79387695693f50b0f4BAA1`](https://sepolia.etherscan.io/address/0x25305962f8EE3e349F79387695693f50b0f4BAA1) |
-| Sepolia | ParadoxToken | [`0x84E17681cb4A5A8f89BF068a61594FF8699577c7`](https://sepolia.etherscan.io/address/0x84E17681cb4A5A8f89BF068a61594FF8699577c7) |
-| Sepolia | SchrodingerCatNFT | [`0x0A9902718f5b0fA61E390746F3d2490211712Fed`](https://sepolia.etherscan.io/address/0x0A9902718f5b0fA61E390746F3d2490211712Fed) |
-
-The same addresses are in `deployed_contracts.json`. These deployments predate the settlement fixes and the bridge fixes in this repository. A new deployment is required before either is live.
+| Ethereum Sepolia | SchrodingerBox | [`0x4642836001Ab04ebDf65f1780F5FB5E297e33990`](https://sepolia.etherscan.io/address/0x4642836001Ab04ebDf65f1780F5FB5E297e33990) |
+| Ethereum Sepolia | WormholeMailbox | [`0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35`](https://sepolia.etherscan.io/address/0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35) |
+| Base Sepolia | SchrodingerBox | [`0xbC727Eda544c08395A59A4b5e5865375b955be12`](https://sepolia.basescan.org/address/0xbC727Eda544c08395A59A4b5e5865375b955be12) |
+| Base Sepolia | WormholeMailbox | [`0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732`](https://sepolia.basescan.org/address/0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732) |
 
 ## Environments & Deployment
 
@@ -74,8 +68,7 @@ The same addresses are in `deployed_contracts.json`. These deployments predate t
 - Example deploy commands:
 
 ```bash
-npx hardhat run scripts/deploy.js --network holesky
-npx hardhat run scripts/deploy.js --network sepolia
+node scripts/deployTestnets.js
 ```
 
 ## License & Credits

@@ -18,9 +18,16 @@ contract MockRelayer {
     bytes public lastPayload;
     uint256 public lastGasLimit;
     uint256 public quote;
+    bool public revertQuote;
+
+    error QuoteUnavailable();
 
     function setQuote(uint256 nextQuote) external {
         quote = nextQuote;
+    }
+
+    function setRevertQuote(bool next) external {
+        revertQuote = next;
     }
 
     function quoteEVMDeliveryPrice(
@@ -28,6 +35,7 @@ contract MockRelayer {
         uint256,
         uint256
     ) external view returns (uint256 deliveryPrice, uint256 wormholeFee) {
+        if (revertQuote) revert QuoteUnavailable();
         return (quote, 0);
     }
 
@@ -46,8 +54,16 @@ contract MockRelayer {
     }
 
     function deliver(address box, uint16 sourceChain, bytes32 sourceAddress) external {
+        _deliver(box, lastPayload, sourceChain, sourceAddress);
+    }
+
+    function deliverPayload(address box, bytes calldata payload, uint16 sourceChain, bytes32 sourceAddress) external {
+        _deliver(box, payload, sourceChain, sourceAddress);
+    }
+
+    function _deliver(address box, bytes memory payload, uint16 sourceChain, bytes32 sourceAddress) internal {
         IDeliveredBox(box).receiveWormholeMessages(
-            lastPayload,
+            payload,
             new bytes[](0),
             sourceAddress,
             sourceChain,

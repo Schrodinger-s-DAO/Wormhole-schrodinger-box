@@ -18,7 +18,7 @@
       <div class="brand">
         <img class="mark" src="/mark.svg" alt="" />
         <div>
-          <p class="eyebrow">Testnet · build 9</p>
+          <p class="eyebrow">Testnet · build 10</p>
           <h1>Schrödinger's <em>Box</em></h1>
         </div>
       </div>
@@ -124,9 +124,14 @@
                 </div>
               </form>
 
+              <form id="form-seal" hidden>
+                <p id="seal-hint" class="hint"></p>
+                <button type="submit" id="seal-submit">Seal this box</button>
+              </form>
+
               <div id="fill-tools" hidden>
-                <form id="form-put-par" class="inline">
-                  <label>Amount<input id="put-par-amount" inputmode="decimal" value="100" /></label>
+                <form id="form-put-par" class="put-line">
+                  <input id="put-par-amount" inputmode="decimal" value="100" aria-label="PAR amount" placeholder="PAR amount" />
                   <button type="button" id="btn-put-par-all" class="ghost">All</button>
                   <button type="submit">Put PAR in this box</button>
                 </form>

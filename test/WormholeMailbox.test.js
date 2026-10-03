@@ -122,4 +122,12 @@ describe("WormholeMailbox", function () {
     await destMail.deliver(vaa);
     await expect(destMail.deliver(vaa)).to.be.revertedWithCustomError(destMail, "AlreadyDelivered");
   });
+
+  it("refuses to replace a peer after the config is frozen", async function () {
+    const { owner, destMail } = await deployPair();
+    await destMail.freezeConfig();
+    await expect(
+      destMail.connect(owner).setPeer(ORIGIN_CHAIN, asBytes32(owner.address))
+    ).to.be.revertedWithCustomError(destMail, "ConfigFrozen");
+  });
 });

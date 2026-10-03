@@ -1,8 +1,8 @@
 # SchrodingerBox security review
 
-Self-review of `contracts/SchrodingerBox.sol` and the ETH path in `contracts/FeeCollector.sol`. This is not a third-party audit. The findings below were in the previous version of the contracts and are fixed in the current source.
+Internal review of the contracts in this repository. This is not an external audit. The contracts are deployed on testnets only. Do not treat this file as an audit, and do not put real value behind these addresses.
 
-**Scope:** deposits, withdrawals, minting-fee refunds, the bridge refund, and the Wormhole round trip. Message authentication (trusted source, replay nonce) is unchanged.
+**Scope:** `contracts/SchrodingerBox.sol`, `contracts/WormholeMailbox.sol`, and the ETH path in `contracts/FeeCollector.sol`. Deposits, withdrawals, the seal, minting-fee refunds, the bridge, and delivery of a signed Wormhole VAA.
 
 ## Summary
 
@@ -20,14 +20,11 @@ Self-review of `contracts/SchrodingerBox.sol` and the ETH path in `contracts/Fee
 | L-02 | Delivery gas is fixed at 500k | Low | Fixed |
 | L-03 | Bridge receiver is not checked against the zero address | Low | Fixed |
 | I-02 | `DebugLog` events in production code | Info | Fixed |
-| O-01 | A bad shadow receiver locks the original forever | High | Open |
-| O-02 | Owner keys can seize a box that is in transit | High | Open |
-| O-03 | The fee fallback makes the bridge revert | Medium | Open |
-| O-04 | A return is not bound to the bridge that locked the box | Medium | Open |
-| O-05 | `deliveryGasLimit` is only a quote | Info | Open |
-| O-06 | A listed box can be emptied before a trade settles | High | Open |
-
-The findings marked **Open** are not fixed in the current source. They are specified below so the next change can implement them. Do not treat this file as an audit.
+| M-04 | `_safeMint` on a shadow can lock the original forever | High | Fixed |
+| M-05 | A listed box can be emptied during a trade | High | Fixed |
+| T-01 | Owner keys can seize a box that is in transit | High | Fixed |
+| L-04 | The fee quote fallback breaks the bridge | Low | Fixed |
+| L-05 | A return is not bound to the bridge that locked the box | Low | Fixed |
 
 ## H-01 — ERC-20 `transferFrom` return value is ignored
 
@@ -115,7 +112,7 @@ Each chain numbers boxes on its own. Delivery minted the shadow with the origin'
 
 `GAS_LIMIT` was 500_000 for every message. A full box writes on the order of 80 storage slots, which does not fit in that budget, so delivery of a full box could revert and leave the original locked.
 
-**Fix:** `deliveryGasLimit` starts at 800_000 and adds 60_000 per listed asset. The quote and the send use that value.
+**Fix:** `deliveryGasLimit` starts at 800_000 and adds 60_000 per listed asset. With the mailbox, that number is only an input to the price quote. Publishing does not attach it as a gas stipend. The account that calls `deliver` pays for execution on the destination chain.
 
 ## L-03 — Bridge receiver is not checked
 
@@ -131,65 +128,114 @@ Each chain numbers boxes on its own. Delivery minted the shadow with the origin'
 
 Bridge and return emitted `DebugLog` for troubleshooting. Those events are removed.
 
-## Open — still to implement
-
-These are in the contracts that are deployed on Ethereum Sepolia and Base Sepolia. None of them is fixed yet.
-
-### O-01 — A bad shadow receiver locks the original forever
+## M-04 — `_safeMint` on a shadow can lock the original forever
 
 **Severity:** High
 
-Delivery mints the shadow with `_safeMint`. If `receiver` is a contract that does not implement `onERC721Received`, the mint reverts. The whole delivery reverts, so it can be retried, and it fails the same way every time. The original stays in this contract with `isLocked = true`. Nothing in the contract can unlock it. The same trap hits a smart wallet that exists on the source chain and has no code on the destination.
+Delivery used to mint the shadow with `_safeMint`. A receiver contract with no `onERC721Received`, including a smart wallet that exists on one chain and not the other, made every delivery revert. The original stayed in this contract with `isLocked` set, and nothing could unlock it.
 
-**To implement:** mint the shadow with `_mint`, not `_safeMint`. The original's own mint can stay a safe mint, because that receiver is `msg.sender` and the transaction is still the user's.
+**Fix:** the shadow is created with `_mint`. The user's own `mintBox` still uses `_safeMint`, because that receiver is the caller of the same transaction. `test/SchrodingerBox.bridge.test.js` mints a shadow to a contract that does not accept ERC-721.
 
-### O-02 — Owner keys can seize a box that is in transit
-
-**Severity:** High
-
-Whoever can call `setTrustedContract` on the box, or `setPeer` on the mailbox, can register a sender they control. That sender can publish a return (action 2). Delivery then unlocks any locked original and transfers it to them. On these testnets the deployer holds both keys, which is acceptable for the demo. It is not acceptable for anything that holds real value.
-
-**To implement:** after the peers and the box are set, freeze those functions the same way `setBox` already refuses a second call. A later deployment that needs rotation should use a multisig and a timelock, not a single owner key.
-
-### O-03 — The fee fallback makes the bridge revert
-
-**Severity:** Medium
-
-If `quoteEVMDeliveryPrice` reverts, the box quotes a fixed `DEFAULT_WORMHOLE_FEE` of 0.01 ETH and sends that value. The mailbox refunds the unused part to the box. The box has no `receive()` function, so the refund reverts and the bridge reverts with it. With the current mailbox the quote rarely fails. The fallback is still worse than letting the quote fail immediately, because a failed quote is a clear revert and a failed refund looks like a broken bridge.
-
-**To implement:** remove the `try/catch` around the quote. If the mailbox cannot price the message, `bridgeBox` and `returnShadowBox` revert before they lock or burn anything.
-
-### O-04 — A return is not bound to the bridge that locked the box
-
-**Severity:** Medium
-
-`returnShadowBox` names the original id and the mailbox checks the peer. It does not check that this return is the message for the bridge that locked the box. A later, trusted return for that id is enough. Saving the bridge `messageNonce` on the shadow, and requiring the same nonce when the origin unlocks, ties the return to that lock.
-
-**To implement:** store the nonce on the shadow when it is minted. On action 2, revert unless the stored nonce matches the nonce in the message.
-
-### O-05 — `deliveryGasLimit` is only a quote
-
-**Severity:** Informational
-
-The mailbox does not use `deliveryGasLimit` when it publishes. The account that calls `deliver` pays for execution. The number still feeds the price quote, so it should stay, with a comment that it is not a gas stipend.
-
-### O-06 — A listed box can be emptied before a trade settles
+## M-05 — A listed box can be emptied during a trade
 
 **Severity:** High
 
-This one is in Atomic Barter's `TradeEscrow`, not in this repository. The escrow stores an NFT as a contract address and a token id. It does not store what is inside. Until settlement the box stays in the owner's wallet, so `withdrawERC20` and `withdrawNFT` still work. `bundleVersion` changes when the trade's asset list changes. It does not change when the inside of a listed box changes.
+Atomic Barter's escrow used to store only the NFT address and token id. The owner could withdraw what was inside after listing and before settlement. The counterparty received an empty box.
 
-Alice can list a box that holds tokens, wait until the other party has approved, withdraw the tokens, and then approve. The other party receives an empty box. Putting the withdrawal in front of their approval, with a higher gas price, works the same way. Bridging the box does not: the box moves to this contract, `transferFrom` fails, and the trade rolls back.
+**Fix:** the box has a seal. `seal` and `unseal` each increase `sealState`. Deposits and withdrawals revert while the box is sealed. A shadow is always sealed. When the original comes home, `sealState` increases again. The interface is `ISealable` (`isSealed`, `sealState`), advertised through ERC-165, with `Sealed` / `Unsealed` and ERC-4906 `MetadataUpdate`. TradeEscrow stores the counter when the NFT reports `ISealable`, and checks it again before the transfer and after every leg. The write-up and the regression tests are in Atomic Barter's `SECURITY.md` (O-01) and `test/TradeEscrow.ts`.
 
-**To implement:** this box exposes `contentVersion(tokenId)`, incremented on every deposit and withdrawal, and ERC-165 for that interface. The escrow stores the version when the NFT is listed, if the contract reports the interface, and reverts with `ContentChanged` at settlement when the version differs. The interface check has to be a `staticcall`, so ordinary NFTs that do not implement ERC-165 can still be listed. The same check covers any container NFT, not only this box. A regression test in `test/TradeEscrow.ts` should run the withdrawal and expect `ContentChanged`.
+## T-01 — Owner keys can seize a box that is in transit
 
-The full write-up is also O-01 in Atomic Barter's `SECURITY.md`. Neither contract has the check yet. The wallet warns and disables accept when it sees a deposit or withdrawal after the box was listed. That is not a substitute for the settlement check.
+**Severity:** High
+
+`setTrustedContract` on the box and `setPeer` on the mailbox choose who is allowed to deliver a return. A later call could point that at a sender the key holder controls, unlock any locked original, and take it.
+
+**Fix:** `freezeConfig()` on each contract is irreversible. After it, those two functions revert. `setBox` on the mailbox was already one-shot. On these testnets the deployer should call `freezeConfig` after the peers are set. A deployment that needs to rotate peers later should put the owner behind a multisig and a timelock, not a single key. `test/SchrodingerBox.bridge.test.js` and `test/WormholeMailbox.test.js` cover the freeze.
+
+## L-04 — The fee quote fallback breaks the bridge
+
+**Severity:** Low
+
+If `quoteEVMDeliveryPrice` reverted, the box used to send a fixed 0.01 ETH. The mailbox refunds the unused value to the box. The box has no `receive()`, so the refund reverted and the bridge reverted with it.
+
+**Fix:** the `try/catch` and `DEFAULT_WORMHOLE_FEE` are gone. A quote that reverts fails the bridge before the original is locked or the shadow is burned. `test/SchrodingerBox.bridge.test.js` covers a reverting quote.
+
+## L-05 — A return is not bound to the bridge that locked the box
+
+**Severity:** Low
+
+A return used to name the original id and pass the peer check. It did not have to be the message for the bridge that locked that box.
+
+**Fix:** `bridgeBox` stores `messageNonce` on the original, and the shadow keeps that same nonce. Action 2 reverts with `NonceMismatch` unless `boxData.messageNonce` equals the nonce stored on the original. `test/SchrodingerBox.bridge.test.js` delivers a return with a different nonce and checks that the original stays locked.
+
+## Deployment
+
+| Chain | Box | Mailbox |
+|-------|-----|---------|
+| Ethereum Sepolia | `0x4642836001Ab04ebDf65f1780F5FB5E297e33990` | `0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35` |
+| Base Sepolia | `0xbC727Eda544c08395A59A4b5e5865375b955be12` | `0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732` |
+
+These addresses were deployed on 3 October 2026 from the source in this repository. Peers and trusted contracts are set, the publish fee is 0, and `freezeConfig` has been called on both boxes and both mailboxes. The explorers do not show a verified source yet. The previous pair (`0x826c…Eb61` / `0xe322…332e`) does not include these fixes and is no longer what the site uses. Holesky is not a supported network.
+
+## Trust model
+
+- **Box owner.** Until `freezeConfig`, this key chooses the trusted box on each other chain and can replace it. It also sets the mint fee and the fee collector. It cannot take assets out of someone else's box.
+- **Mailbox owner.** Until `freezeConfig`, this key chooses the peer mailbox. `setBox` can be called once.
+- **Wormhole guardians.** They sign the VAA. A delivery is accepted only after `parseAndVerifyVM` says the VAA is valid. `CONSISTENCY_LEVEL` is 1, so they sign after the source chain finalizes.
+- **Whoever calls `deliver`.** They pay the destination gas and can submit any valid VAA from a registered peer. They cannot change the payload. A failed delivery reverts the whole transaction, so the same VAA can be submitted again.
+
+## Bridge flow
+
+1. `bridgeBox` quotes the fee, publishes through the mailbox, then moves the original to this contract and sets `isLocked`.
+2. The mailbox publishes with `CONSISTENCY_LEVEL = 1` and records the sequence.
+3. On the destination, `deliver` checks the guardian signatures, the peer, the target chain, and the target box. The sequence is stored before the box is called. If the box reverts, the stored sequence rolls back with the transaction.
+4. The box also rejects a `messageNonce` it has already applied. That is a second replay check, on the payload, separate from the mailbox sequence.
+5. A return burns the shadow when the message is published. Anyone can deliver that VAA. If delivery fails, it can be retried. The original stays locked until a delivery succeeds.
+
+## Rules that have to keep holding
+
+- A shadow cannot deposit or withdraw.
+- A locked original cannot be transferred. Burning it is still allowed.
+- A sealed original cannot deposit or withdraw.
+- A shadow is always sealed.
+- A return unlocks the original only when the nonce matches the bridge that locked it, and then `sealState` increases.
+- A failed delivery does not consume the mailbox sequence.
+
+## Notes for integrators
+
+- At settlement, read `isSealed` and `sealState` for any NFT that supports `ISealable`, and check the counter again after the transfers. TradeEscrow does this. A container that does not implement `ISealable` can still be emptied by its owner.
+- A shadow is the right to bring the original home. It does not hold the assets. The assets stay on the origin chain.
+- A locked original is owned by the box contract. `transferFrom` of that token reverts.
+
+## Reporting a vulnerability
+
+Use Private vulnerability reporting on this GitHub repository (Settings, Security). Do not open a public issue for a problem that can move assets.
+
+## Tests
+
+| Check | Where |
+|-------|--------|
+| False ERC-20 return is not credited | `test/SchrodingerBox.security.test.js` |
+| Fee-on-transfer is credited for what arrived | `test/SchrodingerBox.security.test.js` |
+| USDT-style token with no return data | `test/SchrodingerBox.security.test.js` |
+| Return gives the original to the shadow holder | `test/SchrodingerBox.bridge.test.js` |
+| Shadow cannot withdraw another box's tokens | `test/SchrodingerBox.bridge.test.js` |
+| Shadow id does not collide with a local box | `test/SchrodingerBox.bridge.test.js` |
+| Locked original cannot be transferred | `test/SchrodingerBox.bridge.test.js` |
+| Zero receiver does not lock the box | `test/SchrodingerBox.bridge.test.js` |
+| Quote asks for more than 500k gas | `test/SchrodingerBox.bridge.test.js` |
+| M-04 contract receiver still receives the shadow | `test/SchrodingerBox.bridge.test.js` |
+| L-04 reverting quote does not lock the box | `test/SchrodingerBox.bridge.test.js` |
+| L-05 wrong return nonce leaves the original locked | `test/SchrodingerBox.bridge.test.js` |
+| Seal cycle, shadow stays sealed, return bumps the counter | `test/SchrodingerBox.bridge.test.js` |
+| T-01 frozen trusted contract and frozen peer | `test/SchrodingerBox.bridge.test.js`, `test/WormholeMailbox.test.js` |
+| Mailbox verifies the VAA, the peer, and replay | `test/WormholeMailbox.test.js` |
 
 ## Residual risk
 
 - A token that lies about `balanceOf` can still be credited for a balance increase that is not a real deposit. The user chose that token.
 - A fee-on-transfer token charges again on withdraw. The box pays the recorded net amount; the token may deliver less to the wallet. The contract balance stays consistent with the books.
-- The owner of the box and of the mailbox can still change who is trusted. That is O-02. It is accepted on these testnets and has to be closed before real value.
-- The shadow is burned when the return message is accepted by the relayer, before the origin has executed it. If that delivery never lands, the shadow is gone and the original stays locked until the same message is delivered.
+- Until the owner calls `freezeConfig`, the owner key can still change who is trusted. After that call it cannot. These testnets have not called it on the deployed addresses, and those addresses do not have the function yet.
+- The shadow is burned when the return message is published. Anyone can deliver that VAA, and a failed delivery can be submitted again. The original stays locked until delivery succeeds.
 - `ParadoxToken` and `SchrodingerCatNFT` can be minted by anyone. That is acceptable for these testnet demo tokens.
-- The addresses in the README run the previous bytecode.
+- Container NFTs that do not implement `ISealable` are outside what this box can promise. The trade escrow documents that separately.

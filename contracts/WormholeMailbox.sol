@@ -68,6 +68,9 @@ contract WormholeMailbox is Ownable, ReentrancyGuard {
     mapping(uint16 => bytes32) public peers;
     mapping(bytes32 => bool) public delivered;
 
+    /// @dev Set by `freezeConfig`. After that, `setPeer` reverts.
+    bool public configFrozen;
+
     event BoxSet(address indexed box);
     event PeerSet(uint16 indexed wormholeChainId, bytes32 mailbox);
     event Published(
@@ -77,6 +80,7 @@ contract WormholeMailbox is Ownable, ReentrancyGuard {
         bytes32 sourceBox
     );
     event Delivered(uint16 indexed sourceChain, uint64 indexed sequence, bytes32 sourceBox);
+    event ConfigFrozenSet();
 
     error InvalidAddress();
     error InvalidChain();
@@ -90,6 +94,7 @@ contract WormholeMailbox is Ownable, ReentrancyGuard {
     error AlreadyDelivered();
     error UnexpectedTarget();
     error WrongTargetChain();
+    error ConfigFrozen();
 
     constructor(address wormholeCore, uint16 wormholeChainId, address initialOwner) Ownable(initialOwner) {
         if (wormholeCore == address(0) || initialOwner == address(0) || wormholeChainId == 0) revert InvalidAddress();
@@ -107,9 +112,17 @@ contract WormholeMailbox is Ownable, ReentrancyGuard {
 
     /// @notice Trusts the mailbox deployed on another Wormhole chain. Zero clears it.
     function setPeer(uint16 wormholeChainId, bytes32 mailbox) external onlyOwner {
+        if (configFrozen) revert ConfigFrozen();
         if (wormholeChainId == 0 || wormholeChainId == chainId) revert InvalidChain();
         peers[wormholeChainId] = mailbox;
         emit PeerSet(wormholeChainId, mailbox);
+    }
+
+    /// @notice Stops later changes to peers. Irreversible. `setBox` is already one-shot.
+    function freezeConfig() external onlyOwner {
+        if (configFrozen) revert ConfigFrozen();
+        configFrozen = true;
+        emit ConfigFrozenSet();
     }
 
     /// @notice Price the box forwards. On these testnets the core fee is often zero.

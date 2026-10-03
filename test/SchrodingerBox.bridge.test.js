@@ -155,4 +155,84 @@ describe("SchrodingerBox bridge", function () {
     expect(gas).to.be.gt(500_000n);
     expect(gas).to.equal((await origin.BASE_DELIVERY_GAS()) + (await origin.GAS_PER_ASSET()));
   });
+
+  it("mints a shadow to a contract that does not accept ERC-721", async function () {
+    const { alice, relayer, origin, dest } = await deployPair();
+    const sink = await (await ethers.getContractFactory("BlindReceiver")).deploy();
+    const originBoxId = await mintBox(origin, alice);
+
+    const shadowId = await bridge(relayer, origin, dest, alice, originBoxId, await sink.getAddress());
+    expect(await dest.ownerOf(shadowId)).to.equal(await sink.getAddress());
+    expect((await origin.getBoxDetails(originBoxId)).isLocked).to.equal(true);
+  });
+
+  it("reverts the bridge when the quote reverts, and leaves the box open", async function () {
+    const { alice, relayer, origin } = await deployPair();
+    const originBoxId = await mintBox(origin, alice);
+    await relayer.setRevertQuote(true);
+
+    await expect(
+      origin.connect(alice).bridgeBox(DEST_CHAIN, alice.address, originBoxId)
+    ).to.be.revertedWithCustomError(relayer, "QuoteUnavailable");
+    expect((await origin.getBoxDetails(originBoxId)).isLocked).to.equal(false);
+    expect(await origin.ownerOf(originBoxId)).to.equal(alice.address);
+  });
+
+  it("rejects a return whose nonce is not the bridge that locked the box", async function () {
+    const { alice, relayer, origin, dest } = await deployPair();
+    const originBoxId = await mintBox(origin, alice);
+    await bridge(relayer, origin, dest, alice, originBoxId, alice.address);
+
+    const stored = await origin.boxes(originBoxId);
+    const payload = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["uint8", "uint256", "tuple(address[],uint256[],address[],uint256[],bool,uint16,bool,uint256,bytes32,uint256)", "address", "bytes32"],
+      [
+        2,
+        originBoxId,
+        [[], [], [], [], false, ORIGIN_CHAIN, false, 0, ethers.id("wrong"), originBoxId],
+        alice.address,
+        ethers.id("return")
+      ]
+    );
+    await expect(
+      relayer.deliverPayload(await origin.getAddress(), payload, DEST_CHAIN, asBytes32(await dest.getAddress()))
+    ).to.be.revertedWithCustomError(origin, "NonceMismatch");
+    expect(stored.messageNonce).to.not.equal(ethers.id("wrong"));
+    expect((await origin.getBoxDetails(originBoxId)).isLocked).to.equal(true);
+  });
+
+  it("seals and unseals, keeps a shadow sealed, and bumps the counter when the original comes home", async function () {
+    const { alice, relayer, origin, dest, token } = await deployPair();
+    const originBoxId = await mintBox(origin, alice);
+    expect(await origin.isSealed(originBoxId)).to.equal(false);
+    expect(await origin.supportsInterface("0x49064906")).to.equal(true);
+
+    await origin.connect(alice).seal(originBoxId);
+    expect(await origin.sealState(originBoxId)).to.equal(1n);
+    await expect(
+      origin.connect(alice).depositERC20(originBoxId, await token.getAddress(), 1n)
+    ).to.be.revertedWithCustomError(origin, "BoxSealed");
+
+    await origin.connect(alice).unseal(originBoxId);
+    expect(await origin.isSealed(originBoxId)).to.equal(false);
+    expect(await origin.sealState(originBoxId)).to.equal(2n);
+    await origin.connect(alice).seal(originBoxId);
+
+    const shadowId = await bridge(relayer, origin, dest, alice, originBoxId, alice.address);
+    expect(await dest.isSealed(shadowId)).to.equal(true);
+    await expect(dest.connect(alice).unseal(shadowId)).to.be.revertedWithCustomError(dest, "NotOriginalBox");
+
+    const before = await origin.sealState(originBoxId);
+    await sendHome(relayer, origin, dest, alice, shadowId);
+    expect(await origin.sealState(originBoxId)).to.equal(before + 1n);
+    expect(await origin.isSealed(originBoxId)).to.equal(true);
+  });
+
+  it("refuses to replace a trusted contract after the config is frozen", async function () {
+    const { owner, origin } = await deployPair();
+    await origin.freezeConfig();
+    await expect(
+      origin.connect(owner).setTrustedContract(DEST_CHAIN, asBytes32(owner.address))
+    ).to.be.revertedWithCustomError(origin, "ConfigFrozen");
+  });
 });
