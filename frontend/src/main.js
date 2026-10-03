@@ -37,7 +37,7 @@ const ERRORS = {
   ERC721InsufficientApproval: "Approve the NFT first",
   ERC20InsufficientAllowance: "Approve the token first",
   ERC20InsufficientBalance: "Token balance is too low",
-  ERC721NonexistentToken: "That NFT does not exist"
+  ERC721NonexistentToken: "That box or NFT is already gone"
 };
 
 const boxInterface = new ethers.Interface(boxAbi);
@@ -155,7 +155,7 @@ function walletReason(error) {
     }
   };
   walk(error, 0);
-  const useful = found.filter((line) => !/^internal json-rpc error\.?$/i.test(line));
+  const useful = found.filter((line) => !/^internal json-rpc error\.?$/i.test(line) && !/missing revert data|could not coalesce/i.test(line));
   const picked = useful.find((line) => /insufficient funds|revert|denied|rejected|nonce|underpriced|gas/i.test(line)) || useful[0] || null;
   if (!picked) return null;
   if (/insufficient funds/i.test(picked)) return `This wallet does not have enough ETH on ${network().name} for gas.`;
@@ -592,12 +592,14 @@ async function refreshBoxes() {
 }
 
 function tokenLabel(address) {
-  if (same(address, network().contracts.paradox)) return "PAR";
+  const known = Object.values(NETWORKS).some((net) => same(net.contracts?.paradox, address));
+  if (known) return "PAR";
   return short(address);
 }
 
 function nftLabel(address) {
-  if (same(address, network().contracts.cat)) return "Cat";
+  const known = Object.values(NETWORKS).some((net) => same(net.contracts?.cat, address));
+  if (known) return "Cat";
   return short(address);
 }
 
@@ -610,18 +612,40 @@ function otherSideText(item) {
   return `Home is ${chainName(item.originChain)} · original #${item.originBoxId}`;
 }
 
-function receiverFor(item) {
-  const message = currentPending().find((entry) => (
-    entry.sourceKey === state.networkKey && entry.originBoxId === item.id.toString() && entry.receiver
-  ));
-  return item.target || message?.receiver || null;
+function flightFor(item) {
+  if (!item) return null;
+  const originId = item.original ? item.id.toString() : item.originBoxId.toString();
+  return currentPending().find((message) => message.originBoxId === originId) || null;
 }
 
-function targetLabel(item) {
-  const where = otherNetwork(state.networkKey).name;
-  const address = receiverFor(item);
-  if (!address) return `the target on ${where}`;
-  return `${address} on ${where}`;
+function statusLine(item, detailed) {
+  const flight = flightFor(item);
+  if (flight) {
+    const from = NETWORKS[flight.sourceKey].name;
+    const to = NETWORKS[flight.targetKey].name;
+    const line = `Bridging from ${from} to ${to}`;
+    if (detailed && flight.targetKey !== state.networkKey) return `${line}. Deliver it on ${to}.`;
+    return line;
+  }
+  if (!item.original) return `Shadow of original #${item.originBoxId} on ${chainName(item.originChain)}`;
+  if (item.locked) return `Locked on ${network().name}`;
+  return `Open on ${network().name}`;
+}
+
+function ownerText(item) {
+  if (item.original && item.locked) {
+    const address = receiverFor(item);
+    return address ? `Owned by ${address}` : "Owned by this contract until the shadow comes home";
+  }
+  if (same(item.owner, state.account)) return "Owned by you";
+  if (same(item.owner, network().contracts.box)) return "Owned by this contract";
+  return `Owned by ${item.owner}`;
+}
+
+function receiverFor(item) {
+  const originId = item.id.toString();
+  const message = currentPending().find((entry) => entry.originBoxId === originId && entry.receiver);
+  return item.target || message?.receiver || null;
 }
 
 function insideText(item) {
@@ -629,7 +653,7 @@ function insideText(item) {
     ...item.tokens.map((token) => `${tokenLabel(token.address)} ${formatAmount(token.amount)}`),
     ...item.nfts.map((nft) => `${nftLabel(nft.contract)} #${nft.id}`)
   ];
-  return parts.length ? `Inside: ${parts.join(", ")}.` : "Inside: nothing.";
+  return parts.length ? parts.join(", ") : "Empty";
 }
 
 async function shadowTargets(originIds) {
@@ -674,10 +698,7 @@ function renderBoxes() {
   const visible = visibleBoxes();
   const raw = $("box-id").value.trim();
   if (!visible.some((item) => item.id.toString() === raw)) {
-    const pick = visible.find((item) => item.original && !item.locked && same(item.owner, state.account))
-      || visible.find((item) => same(item.owner, state.account))
-      || visible.find((item) => item.original && item.locked)
-      || null;
+    const pick = visible.find((item) => same(item.owner, state.account) && (item.original ? !item.locked : true)) || null;
     $("box-id").value = pick ? pick.id.toString() : "";
   }
   if (state.boxes.length === 0) {
@@ -693,7 +714,6 @@ function renderBoxes() {
   const selected = $("box-id").value.trim();
   let group = "";
   for (const item of visible) {
-    const held = same(item.owner, network().contracts.box);
     const mine = same(item.owner, state.account);
     const next = item.original && item.locked ? "Locked" : mine ? "Yours" : "Others";
     if (next !== group) {
@@ -706,26 +726,20 @@ function renderBoxes() {
     const head = el("div", "row");
     head.append(el("span", "id", `#${item.id}`), el("span", `tag ${tagKind(item)}`, tagText(item)));
     card.append(head);
-    const ownerAddress = item.original && item.locked ? receiverFor(item) : null;
-    if (ownerAddress) {
-      const open = state.openAddress === item.id.toString();
-      const shown = open ? ownerAddress : short(ownerAddress);
-      const line = el("div", "addr", `Owned by ${shown} on ${otherNetwork(state.networkKey).name}`);
+    card.append(el("div", "", statusLine(item)));
+    const owned = item.original && item.locked ? receiverFor(item) : item.owner;
+    const open = state.openAddress === item.id.toString();
+    const shown = !owned ? "this contract" : open ? owned : (same(owned, state.account) ? "you" : short(owned));
+    const line = el("div", owned ? "addr" : "", `Owned by ${shown}`);
+    if (owned) {
       line.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         state.openAddress = open ? null : item.id.toString();
         renderBoxes();
       });
-      card.append(line);
-    } else {
-      const who = held ? "this contract" : mine ? "you" : short(item.owner);
-      card.append(el("div", "", who));
     }
-    if (item.tokens.length === 0 && item.nfts.length === 0) card.append(el("div", "hint", "empty"));
-    for (const token of item.tokens) card.append(el("div", "", `${tokenLabel(token.address)} ${formatAmount(token.amount)}`));
-    for (const nft of item.nfts) card.append(el("div", "", `${nftLabel(nft.contract)} #${nft.id}`));
-    card.append(el("div", "hint", otherSideText(item)));
+    card.append(line);
     card.addEventListener("click", () => selectBox(item));
     host.append(card);
   }
@@ -756,38 +770,45 @@ function syncSelection() {
   const hint = $("selected-hint");
   const raw = $("box-id").value.trim();
   const item = state.boxes.find((box) => box.id.toString() === raw);
+  const title = $("box-title");
+  const owner = $("box-owner");
+  const label = $("contents-label");
   if (!item) {
-    hint.textContent = raw ? "No box with that id on this network." : "Mint a box, or pick one.";
+    if (title) title.textContent = "Select a box";
+    hint.textContent = raw ? "No box with that id on this network." : "Pick a box on the left.";
+    owner.textContent = "";
+    if (label) label.hidden = true;
     renderContents();
     paintForms();
     return;
   }
-  const other = otherNetwork(state.networkKey).name;
-  const inside = insideText(item);
-  if (item.original && item.locked) {
-    const inflight = currentPending().some((message) => message.sourceKey === state.networkKey);
-    hint.textContent = inflight
-      ? `${inside} Locked. Owned by ${targetLabel(item)}. The shadow is not on ${other} yet, so it cannot be sent or destroyed.`
-      : `${inside} Locked. Owned by ${targetLabel(item)}. That wallet receives this folder when the shadow comes home.`;
-  }
-  else if (item.original) hint.textContent = same(item.owner, state.account)
-    ? `${inside} Open. Lock it and the shadow goes to ${other}. You choose who receives it.`
-    : `${inside} Open original in another wallet. Its shadow goes to ${other}.`;
-  else hint.textContent = `${inside} ${otherSideText(item)}. Send this shadow, and that wallet receives the original.`;
+  if (title) title.textContent = `Box #${item.id}`;
+  hint.textContent = statusLine(item, true);
+  owner.textContent = ownerText(item);
+  if (label) label.hidden = false;
   renderContents();
   paintForms();
 }
 
 function paintForms() {
   const item = selectedItem();
-  const waiting = currentPending().length > 0;
   const openMine = Boolean(item && item.original && !item.locked && same(item.owner, state.account));
   const shadowMine = Boolean(item && !item.original && same(item.owner, state.account));
-  $("form-bridge").hidden = waiting || !openMine;
+  const yours = openMine || shadowMine;
+  $("fill-tools").hidden = !openMine;
+  $("more-assets").hidden = !openMine;
   $("form-return").hidden = !shadowMine;
   $("form-transfer").hidden = !shadowMine;
-  const lockedHere = Boolean(item && item.original && item.locked);
-  $("timeline").hidden = !waiting && !lockedHere;
+  const foreign = $("box-foreign");
+  if (!item || yours) {
+    foreign.hidden = true;
+  } else if (item.original && item.locked) {
+    foreign.hidden = false;
+    foreign.textContent = "This box is locked. It unlocks for whoever destroys the shadow.";
+  } else {
+    foreign.hidden = false;
+    foreign.textContent = "This box is not yours.";
+  }
 }
 
 function selectedItem() {
@@ -822,7 +843,7 @@ async function readBridgePayload(source, event) {
       if (!parsed || parsed.args.sequence.toString() !== event.args.sequence.toString()) continue;
       const outer = coder.decode(["uint16", "address", "bytes", "bytes32"], parsed.args.payload);
       const inner = coder.decode(["uint8", "uint256", BOX_TUPLE, "address", "bytes32"], outer[2]);
-      return { receiver: inner[3], originBoxId: inner[1].toString() };
+      return { receiver: inner[3], originBoxId: inner[1].toString(), action: Number(inner[0]) };
     }
   } catch {
     return {};
@@ -894,7 +915,8 @@ async function findMessages() {
         emitter: source.contracts.mailbox,
         startedAt: saved?.startedAt || startedAt,
         receiver: carried.receiver || saved?.receiver || null,
-        originBoxId: carried.originBoxId || saved?.originBoxId || null
+        originBoxId: carried.originBoxId || saved?.originBoxId || null,
+        action: carried.action ?? saved?.action ?? null
       });
     }
   }
@@ -929,14 +951,32 @@ function paintSteps(phase) {
 
 function stageCopy(item, signed) {
   const target = NETWORKS[item.targetKey].name;
-  const who = item.receiver ? ` It goes to ${item.receiver}.` : "";
-  if (!signed) return `${waitCopy(item)} The shadow does not exist yet, so it cannot be sent or destroyed.${who}`;
-  if (item.targetKey === state.networkKey) {
-    let line = `Signed. You are on ${target}. Press Deliver here. That creates the shadow.${who}`;
+  const home = item.action === 2;
+  const fresh = item.action === 1;
+  const who = item.receiver ? ` ${item.receiver}` : "";
+  if (!signed) {
+    if (home) return `${waitCopy(item)} The original stays locked until you deliver this message.`;
+    if (fresh) return `${waitCopy(item)} The shadow does not exist until you deliver this message.`;
+    return `${waitCopy(item)} Deliver it on ${target} once Wormhole has signed it.`;
+  }
+  if (home) return `Signed. Press Deliver. The original unlocks for${who || " the wallet that destroyed the shadow"}.`;
+  if (fresh) {
+    let line = `Signed. Press Deliver. That creates the shadow${who ? ` for${who}` : ""}.`;
     if (state.account && state.ethBalance === 0n) line += ` This wallet has no ETH on ${target} for gas.`;
     return line;
   }
-  return `Signed. Deliver on ${target}. This page cannot do it. The shadow does not exist until then, so it cannot be sent or destroyed.${who}`;
+  return `Signed. Press Deliver on ${target}.`;
+}
+
+function messageForHere() {
+  const selected = selectedItem();
+  const flight = flightFor(selected);
+  if (flight?.targetKey === state.networkKey) return flight;
+  if (selected) return null;
+  return currentPending().find((message) => {
+    if (message.targetKey !== state.networkKey || message.action === 2) return false;
+    return !state.boxes.some((box) => box.original && box.id.toString() === String(message.originBoxId));
+  }) || null;
 }
 
 function renderContents() {
@@ -1237,31 +1277,23 @@ function decodedReason(error) {
 }
 
 async function refreshDelivery() {
+  const incoming = $("incoming");
   const status = $("delivery-status");
   const button = $("btn-deliver");
-  const item = currentPending()[0] || null;
+  const item = messageForHere();
   if (!item) {
     state.readyVaa = null;
     state.readyId = null;
     button.hidden = true;
-    $("step-done").textContent = `Deliver on ${otherNetwork(state.networkKey).name}`;
-    const locked = selectedItem();
-    if (locked?.original && locked.locked) {
-      paintSteps("out");
-      $("step-done").textContent = "Shadow is live";
-      $("bridge-title").textContent = "Shadow is live";
-      status.textContent = `Locked. Owned by ${targetLabel(locked)}. The shadow is on ${otherNetwork(state.networkKey).name}. Send it or destroy it there.`;
-    } else {
-      $("bridge-title").textContent = "Bridge";
-      status.textContent = "No message waiting.";
-    }
+    incoming.hidden = true;
     paintForms();
     return;
   }
-  const here = item.targetKey === state.networkKey;
+  incoming.hidden = false;
+  const sourceName = NETWORKS[item.sourceKey].name;
   const targetName = NETWORKS[item.targetKey].name;
-  $("step-done").textContent = `Deliver on ${targetName}`;
-  $("bridge-title").textContent = here ? "Deliver here" : `Deliver on ${targetName}`;
+  $("bridge-title").textContent = `Bridging from ${sourceName} to ${targetName}`;
+  $("step-done").textContent = item.action === 2 ? "Unlock the original" : "Shadow arrives";
   const vaa = state.vaaCache[item.id] || await fetchVaa(item);
   if (!vaa) {
     state.readyVaa = null;
@@ -1269,14 +1301,13 @@ async function refreshDelivery() {
     button.hidden = true;
     paintSteps("waiting");
     status.textContent = stageCopy(item, false);
-    $("bridge-title").textContent = "Waiting for Wormhole";
     paintForms();
     return;
   }
   state.vaaCache[item.id] = vaa;
-  state.readyVaa = here ? vaa : null;
-  state.readyId = here ? item.id : null;
-  button.hidden = !here;
+  state.readyVaa = vaa;
+  state.readyId = item.id;
+  button.hidden = false;
   paintSteps("signed");
   status.textContent = stageCopy(item, true);
   paintForms();
@@ -1305,22 +1336,22 @@ function isSponsoredRefusal(error) {
   return /EIP-7702|gas included|sponsored/i.test(walletText(error));
 }
 
-async function sendDeliver(from, data, gas, gasPrice) {
+async function sendPriced(from, to, data, value, gas, gasPrice) {
   try {
     return await window.ethereum.request({
       method: "eth_sendTransaction",
       params: [{
         from,
-        to: network().contracts.mailbox,
+        to,
         data,
-        value: "0x0",
+        value: ethers.toQuantity(value),
         gas: ethers.toQuantity(gas),
         gasPrice: ethers.toQuantity(gasPrice)
       }]
     });
   } catch (error) {
     if (!isSponsoredRefusal(error)) throw error;
-    throw invalid("MetaMask tried to sponsor the gas. Open MetaMask, Settings, Advanced, turn off Smart Transactions. Press Deliver again and pay the fee in ETH.");
+    throw invalid("MetaMask tried to sponsor the gas. Open MetaMask, Settings, Advanced, turn off Smart Transactions, then try again and pay the fee in ETH.");
   }
 }
 
@@ -1341,7 +1372,7 @@ async function onDeliver() {
       throw invalid(`This wallet has ${ethers.formatEther(balance)} ETH on ${network().name}. Delivery needs about ${ethers.formatEther(cost)} ETH for gas.`);
     }
     const data = mailbox.interface.encodeFunctionData("deliver", [vaa]);
-    const hash = await sendDeliver(from, data, gas, gasPrice);
+    const hash = await sendPriced(from, network().contracts.mailbox, data, 0n, gas, gasPrice);
     log(`tx ${hash}`);
     const receipt = await provider().waitForTransaction(hash);
     if (!receipt || receipt.status === 0) throw invalid("The delivery transaction was mined and failed.");
@@ -1433,14 +1464,39 @@ async function onBridge() {
 }
 
 async function onReturn() {
-  await run("Return home", async () => {
+  await run("Destroy shadow", async () => {
     const signer = await requireSigner();
-    const box = currentBox(signer);
+    const from = await signer.getAddress();
     const id = selectedId();
-    const details = await box.getBoxDetails(id);
+    const box = currentBox(provider());
+    let details;
+    try {
+      details = await box.getBoxDetails(id);
+    } catch (error) {
+      throw invalid(decodedReason(error) || "That shadow is already gone.");
+    }
+    if (details.isOriginal) throw invalid("Only a shadow can be destroyed.");
     const count = BigInt(details.erc20Tokens.length + details.erc721Contracts.length);
     const fee = await box.getFunction("getWormholeFee(uint16,uint256)")(Number(details.originChain), count);
-    await send(box.returnShadowBox(id, { value: fee }));
+    try {
+      await box.returnShadowBox.staticCall(id, { from, value: fee });
+    } catch (error) {
+      throw invalid(decodedReason(error) || "Destroy was rejected, and the network did not say why.");
+    }
+    const gas = ((await box.returnShadowBox.estimateGas(id, { from, value: fee })) * 3n) / 2n;
+    const feeData = await provider().getFeeData();
+    const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 20_000_000n;
+    const balance = await provider().getBalance(from);
+    const cost = gas * gasPrice + fee;
+    if (balance < cost) {
+      throw invalid(`This wallet has ${ethers.formatEther(balance)} ETH on ${network().name}. Destroy needs about ${ethers.formatEther(cost)} ETH.`);
+    }
+    const data = box.interface.encodeFunctionData("returnShadowBox", [id]);
+    const hash = await sendPriced(from, network().contracts.box, data, fee, gas, gasPrice);
+    log(`tx ${hash}`);
+    const receipt = await provider().waitForTransaction(hash);
+    if (!receipt || receipt.status === 0) throw invalid("Destroy was mined and failed.");
+    noteReceipt(receipt);
   });
 }
 

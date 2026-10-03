@@ -18,7 +18,7 @@
       <div class="brand">
         <img class="mark" src="/mark.svg" alt="" />
         <div>
-          <p class="eyebrow">Testnet · build 8</p>
+          <p class="eyebrow">Testnet · build 9</p>
           <h1>Schrödinger's <em>Box</em></h1>
         </div>
       </div>
@@ -58,7 +58,7 @@
         <div class="layout">
           <section class="panel">
             <div class="row spread">
-              <h2 id="box-heading">Your boxes</h2>
+              <h2 id="box-heading">Boxes</h2>
               <div class="row">
                 <div class="seg" role="tablist" aria-label="Which boxes">
                   <button type="button" id="filter-mine" role="tab" aria-selected="true">Yours</button>
@@ -73,65 +73,72 @@
           <section class="panel" id="actions">
             <p id="flash" class="flash" aria-live="polite"></p>
             <input id="box-id" type="hidden" />
-            <p id="selected-hint" class="hint">Mint a box, or pick one.</p>
-            <div id="contents" class="chips"></div>
 
             <form id="form-mint" class="card">
-              <h3>1. Mint a box</h3>
-              <p class="hint">The folder, on this chain. Fee <span id="mint-fee">…</span>.</p>
+              <h3>Create a box</h3>
+              <p class="hint">A new folder on this chain. Fee <span id="mint-fee">…</span>.</p>
               <button type="submit">Mint box</button>
             </form>
 
             <div class="card faucet" id="practice">
-              <h3>2. Mock assets, on this chain</h3>
-              <p class="hint">Mint them here. Then put them in an open box you hold. ETH <span id="asset-eth">—</span> · PAR <span id="asset-par">—</span>.</p>
+              <h3>Create mock assets</h3>
+              <p class="hint">These stay in your wallet. Add them only to an open box you own. ETH <span id="asset-eth">—</span> · PAR <span id="asset-par">—</span>.</p>
               <form id="form-par" class="inline">
                 <label>PAR<input id="par-amount" inputmode="decimal" value="100" /></label>
                 <button type="button" id="btn-par-all" class="ghost">All</button>
                 <button type="submit" class="ghost">Mint PAR</button>
-                <button type="button" id="btn-put-par">Put PAR in box</button>
               </form>
-              <div class="row">
-                <form id="form-cat">
-                  <button type="submit" class="ghost">Mint cat</button>
+              <form id="form-cat">
+                <button type="submit" class="ghost">Mint cat</button>
+              </form>
+            </div>
+
+            <div class="card" id="box-panel">
+              <h3 id="box-title">Select a box</h3>
+              <p id="selected-hint" class="hint">Pick a box on the left.</p>
+              <p id="box-owner" class="hint"></p>
+              <p id="contents-label" class="eyebrow" hidden>Contents</p>
+              <div id="contents" class="chips"></div>
+              <p id="box-foreign" class="hint" hidden>This box is not yours.</p>
+
+              <div class="card inset" id="incoming" hidden>
+                <h3 id="bridge-title">Bridging</h3>
+                <ol id="timeline" class="timeline">
+                  <li id="step-lock">Locked</li>
+                  <li id="step-wait">Waiting for Wormhole</li>
+                  <li id="step-sign">Signed</li>
+                  <li id="step-done">Deliver on the other chain</li>
+                </ol>
+                <p id="delivery-status" class="hint"></p>
+                <button type="button" id="btn-deliver" hidden>Deliver signed message</button>
+              </div>
+
+              <div id="fill-tools" hidden>
+                <button type="button" id="btn-put-par">Put PAR in this box</button>
+                <div id="cat-list" class="chips"></div>
+                <form id="form-bridge">
+                  <label>Who receives the shadow<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+                  <p class="hint">Publish fee <span id="bridge-fee">…</span>. Guardians usually sign in 15–20 minutes.</p>
+                  <button type="submit">Bridge to the other chain</button>
                 </form>
               </div>
-              <div id="cat-list" class="chips"></div>
-            </div>
 
-            <form id="form-transfer" class="card" hidden>
-              <h3>Send the shadow</h3>
-              <p class="hint">The wallet that holds this shadow receives the original when it comes home.</p>
-              <label>To<input id="transfer-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
-              <div class="row">
-                <button type="submit">Send shadow</button>
-                <button type="button" id="btn-me" class="ghost">Me</button>
-              </div>
-            </form>
-
-            <div class="card span" id="bridge-card">
-              <h3 id="bridge-title">Bridge</h3>
-              <p class="hint">PAR and cats stay on the chain where you deposited them. The other chain only receives the shadow box.</p>
-              <ol id="timeline" class="timeline" hidden>
-                <li id="step-lock">Locked</li>
-                <li id="step-wait">Waiting for Wormhole</li>
-                <li id="step-sign">Signed</li>
-                <li id="step-done">Deliver on the other chain</li>
-              </ol>
-              <p id="delivery-status" class="hint">No message waiting.</p>
-              <form id="form-bridge">
-                <label>Who receives the shadow<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
-                <p class="hint">Publish fee <span id="bridge-fee">…</span>. Guardians usually sign in 15–20 minutes. Nothing is stuck while you wait.</p>
-                <button type="submit">Lock and send</button>
+              <form id="form-transfer" hidden>
+                <h3>Move the shadow</h3>
+                <p class="hint">The wallet that holds this shadow receives the original when it comes home.</p>
+                <label>To<input id="transfer-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+                <div class="row">
+                  <button type="submit">Send shadow</button>
+                  <button type="button" id="btn-me" class="ghost">Me</button>
+                </div>
               </form>
               <form id="form-return" hidden>
-                <p class="hint">Destroys this shadow and sends the folder back to this wallet on the original chain. Publish fee <span id="return-fee">…</span>.</p>
+                <p class="hint">Destroys this shadow. After delivery, this wallet receives the folder on the original chain. Publish fee <span id="return-fee">…</span>.</p>
                 <button type="submit">Destroy shadow</button>
               </form>
-              <button type="button" id="btn-deliver" hidden>Deliver signed message</button>
             </div>
 
-            <details class="card extra">
+            <details class="card extra" id="more-assets" hidden>
               <summary>Other token or NFT</summary>
               <div class="grid">
                 <form id="form-deposit" class="card">

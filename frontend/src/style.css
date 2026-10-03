@@ -133,10 +133,13 @@ label {
   color: var(--muted);
 }
 .sub, .hint, .meta { color: var(--muted); }
-.hint, .meta, #delivery-status, #selected-hint, #bridge-title {
+.hint, .meta, #delivery-status, #selected-hint, #box-owner, #bridge-title {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+#fill-tools { display: grid; gap: 12px; margin-top: 4px; }
+#box-panel { display: grid; gap: 8px; }
+.card.inset { background: transparent; padding: 0; }
 .meta { margin: 10px auto 0; font-size: 13px; }
 .meta a { color: var(--ice); }
 
