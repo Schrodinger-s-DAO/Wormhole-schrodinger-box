@@ -746,11 +746,18 @@ function waitCopy(item) {
 
 function paintSteps(phase) {
   const steps = ["step-lock", "step-wait", "step-sign", "step-done"];
-  const current = { waiting: 1, signed: 2, done: 3 }[phase] ?? -1;
+  const current = { waiting: 1, signed: 3 }[phase] ?? -1;
   steps.forEach((id, index) => {
     const node = $(id);
     node.className = index < current ? "done" : index === current ? "now" : "";
   });
+}
+
+function stageCopy(item, signed) {
+  const target = NETWORKS[item.targetKey].name;
+  if (!signed) return waitCopy(item);
+  if (item.targetKey === state.networkKey) return `Signed. You are on ${target}. Press Deliver here.`;
+  return `Signed. Deliver on ${target}. This page cannot do it.`;
 }
 
 function renderContents() {
@@ -1031,17 +1038,32 @@ async function takeNft(boxId, nft, tokenId) {
   });
 }
 
+function decodedReason(error) {
+  if (error?.revert?.name) return ERRORS[error.revert.name] || error.revert.name;
+  const data = findRevertData(error);
+  if (!data) return null;
+  for (const parser of parsers) {
+    try {
+      const parsed = parser.parseError(data);
+      if (!parsed) continue;
+      if (parsed.name === "InvalidVaa" && parsed.args?.[0]) return `Wormhole rejected the signed message: ${parsed.args[0]}`;
+      return ERRORS[parsed.name] || parsed.name;
+    } catch {
+      /* next ABI */
+    }
+  }
+  return null;
+}
+
 async function refreshDelivery() {
   const status = $("delivery-status");
   const button = $("btn-deliver");
-  const pending = currentPending();
-  const here = pending.find((item) => item.targetKey === state.networkKey);
-  const elsewhere = pending.find((item) => item.targetKey !== state.networkKey);
-  const item = here || elsewhere || null;
+  const item = currentPending()[0] || null;
   if (!item) {
     state.readyVaa = null;
     state.readyId = null;
     button.hidden = true;
+    $("step-done").textContent = `Deliver on ${otherNetwork(state.networkKey).name}`;
     const locked = selectedItem();
     if (locked?.original && locked.locked) {
       paintSteps("waiting");
@@ -1052,40 +1074,63 @@ async function refreshDelivery() {
     paintForms();
     return;
   }
-  if (!here) {
-    state.readyVaa = null;
-    state.readyId = null;
-    button.hidden = true;
-    paintSteps("waiting");
-    status.textContent = `${waitCopy(elsewhere)} Switch to ${NETWORKS[elsewhere.targetKey].name} when it is signed.`;
-    paintForms();
-    return;
-  }
-  const vaa = await fetchVaa(here);
+  $("step-done").textContent = `Deliver on ${NETWORKS[item.targetKey].name}`;
+  const vaa = await fetchVaa(item);
+  const here = item.targetKey === state.networkKey;
   if (!vaa) {
     state.readyVaa = null;
     state.readyId = null;
     button.hidden = true;
     paintSteps("waiting");
-    status.textContent = waitCopy(here);
+    const line = stageCopy(item, false);
+    status.textContent = line;
+    $("bridge-title").textContent = "Waiting for Wormhole";
     paintForms();
     return;
   }
-  state.readyVaa = vaa;
-  state.readyId = here.id;
+  state.readyVaa = here ? vaa : null;
+  state.readyId = here ? item.id : null;
+  button.hidden = !here;
   paintSteps("signed");
-  status.textContent = "Signed. Deliver it on this chain. The shadow’s holder receives the original.";
-  button.hidden = false;
+  const line = stageCopy(item, true);
+  status.textContent = line;
+  $("bridge-title").textContent = line;
   paintForms();
+}
+
+async function simulateDeliver(vaa) {
+  const mailbox = new ethers.Contract(network().contracts.mailbox, mailboxAbi, provider());
+  try {
+    await mailbox.deliver.staticCall(vaa);
+  } catch (error) {
+    const reason = decodedReason(error);
+    if (reason) throw invalid(reason);
+    const raw = error.shortMessage || error.message || "";
+    if (/could not coalesce|missing revert data/i.test(raw)) {
+      throw invalid(`Delivery was rejected on ${network().name}, and the network did not say why.`);
+    }
+    throw error;
+  }
 }
 
 async function onDeliver() {
   await run("Deliver", async () => {
     const vaa = state.readyVaa;
     if (!vaa) throw invalid("The signed message is not here yet");
+    await simulateDeliver(vaa);
     const signer = await requireSigner();
     const mailbox = new ethers.Contract(network().contracts.mailbox, mailboxAbi, signer);
-    await send(mailbox.deliver(vaa));
+    try {
+      await send(mailbox.deliver(vaa));
+    } catch (error) {
+      const raw = error.shortMessage || error.message || "";
+      if (/could not coalesce|missing revert data/i.test(raw)) {
+        throw invalid("The message is still signed. Nothing is stuck. The wallet could not send it.");
+      }
+      const reason = decodedReason(error);
+      if (reason) throw invalid(reason);
+      throw error;
+    }
   });
 }
 
