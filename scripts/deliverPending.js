@@ -1,6 +1,8 @@
 const path = require("path");
 
-const envPath = path.resolve(__dirname, "..", "..", "Atomic Barter", ".env");
+const envPath = process.env.ENV_FILE
+  ? path.resolve(process.env.ENV_FILE)
+  : path.resolve(__dirname, "..", ".env");
 require("dotenv").config({ path: envPath });
 
 const { ethers } = require("ethers");

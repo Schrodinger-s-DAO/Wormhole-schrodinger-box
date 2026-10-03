@@ -20,9 +20,9 @@ Internal review of the contracts in this repository. This is not an external aud
 | L-02 | Delivery gas is fixed at 500k | Low | Fixed |
 | L-03 | Bridge receiver is not checked against the zero address | Low | Fixed |
 | I-02 | `DebugLog` events in production code | Info | Fixed |
-| M-04 | `_safeMint` on a shadow can lock the original forever | High | Fixed |
-| M-05 | A listed box can be emptied during a trade | High | Fixed |
-| T-01 | Owner keys can seize a box that is in transit | High | Fixed |
+| H-05 | `_safeMint` on a shadow can lock the original forever | High | Fixed |
+| H-06 | A listed box can be emptied during a trade | High | Fixed |
+| T-01 | Owner keys can seize a box that is in transit | High | Mitigated |
 | L-04 | The fee quote fallback breaks the bridge | Low | Fixed |
 | L-05 | A return is not bound to the bridge that locked the box | Low | Fixed |
 
@@ -128,7 +128,7 @@ Each chain numbers boxes on its own. Delivery minted the shadow with the origin'
 
 Bridge and return emitted `DebugLog` for troubleshooting. Those events are removed.
 
-## M-04 — `_safeMint` on a shadow can lock the original forever
+## H-05 — `_safeMint` on a shadow can lock the original forever
 
 **Severity:** High
 
@@ -136,7 +136,7 @@ Delivery used to mint the shadow with `_safeMint`. A receiver contract with no `
 
 **Fix:** the shadow is created with `_mint`. The user's own `mintBox` still uses `_safeMint`, because that receiver is the caller of the same transaction. `test/SchrodingerBox.bridge.test.js` mints a shadow to a contract that does not accept ERC-721.
 
-## M-05 — A listed box can be emptied during a trade
+## H-06 — A listed box can be emptied during a trade
 
 **Severity:** High
 
@@ -150,7 +150,7 @@ Atomic Barter's escrow used to store only the NFT address and token id. The owne
 
 `setTrustedContract` on the box and `setPeer` on the mailbox choose who is allowed to deliver a return. A later call could point that at a sender the key holder controls, unlock any locked original, and take it.
 
-**Fix:** `freezeConfig()` on each contract is irreversible. After it, those two functions revert. `setBox` on the mailbox was already one-shot. On these testnets the deployer should call `freezeConfig` after the peers are set. A deployment that needs to rotate peers later should put the owner behind a multisig and a timelock, not a single key. `test/SchrodingerBox.bridge.test.js` and `test/WormholeMailbox.test.js` cover the freeze.
+**Mitigation:** `freezeConfig()` on each contract is irreversible. After it, those two functions revert. `setBox` on the mailbox was already one-shot. The contracts do not freeze themselves. A deployment is mitigated only after the owner calls `freezeConfig`, once the peers are set. These testnet addresses have called it. A deployment that needs to rotate peers later should put the owner behind a multisig and a timelock, not a single key. `test/SchrodingerBox.bridge.test.js` and `test/WormholeMailbox.test.js` cover the freeze.
 
 ## L-04 — The fee quote fallback breaks the bridge
 
@@ -224,7 +224,7 @@ Use Private vulnerability reporting on this GitHub repository (Settings, Securit
 | Locked original cannot be transferred | `test/SchrodingerBox.bridge.test.js` |
 | Zero receiver does not lock the box | `test/SchrodingerBox.bridge.test.js` |
 | Quote asks for more than 500k gas | `test/SchrodingerBox.bridge.test.js` |
-| M-04 contract receiver still receives the shadow | `test/SchrodingerBox.bridge.test.js` |
+| H-05 contract receiver still receives the shadow | `test/SchrodingerBox.bridge.test.js` |
 | L-04 reverting quote does not lock the box | `test/SchrodingerBox.bridge.test.js` |
 | L-05 wrong return nonce leaves the original locked | `test/SchrodingerBox.bridge.test.js` |
 | Seal cycle, shadow stays sealed, return bumps the counter | `test/SchrodingerBox.bridge.test.js` |
@@ -235,7 +235,7 @@ Use Private vulnerability reporting on this GitHub repository (Settings, Securit
 
 - A token that lies about `balanceOf` can still be credited for a balance increase that is not a real deposit. The user chose that token.
 - A fee-on-transfer token charges again on withdraw. The box pays the recorded net amount; the token may deliver less to the wallet. The contract balance stays consistent with the books.
-- Until the owner calls `freezeConfig`, the owner key can still change who is trusted. After that call it cannot. These testnets have not called it on the deployed addresses, and those addresses do not have the function yet.
+- Until the owner calls `freezeConfig`, the owner key can still change who is trusted. After that call it cannot.
 - The shadow is burned when the return message is published. Anyone can deliver that VAA, and a failed delivery can be submitted again. The original stays locked until delivery succeeds.
 - `ParadoxToken` and `SchrodingerCatNFT` can be minted by anyone. That is acceptable for these testnet demo tokens.
 - Container NFTs that do not implement `ISealable` are outside what this box can promise. The trade escrow documents that separately.
