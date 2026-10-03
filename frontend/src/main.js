@@ -128,10 +128,43 @@ function findRevertData(error) {
   return null;
 }
 
+function walletReason(error) {
+  const found = [];
+  const seen = new Set();
+  const walk = (value, depth) => {
+    if (value == null || depth > 5) return;
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text || text.length > 400 || /^0x[0-9a-f]{20,}$/i.test(text)) return;
+      if (/could not coalesce|^unknown_error$|^eth_|^[A-Z0-9_]+$/i.test(text)) return;
+      if (!found.includes(text)) found.push(text);
+      try {
+        walk(JSON.parse(text), depth + 1);
+      } catch {
+        /* not JSON */
+      }
+      return;
+    }
+    if (typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    for (const key of Object.keys(value)) {
+      if (key === "stack") continue;
+      walk(value[key], depth + 1);
+    }
+  };
+  walk(error, 0);
+  const useful = found.filter((line) => !/^internal json-rpc error\.?$/i.test(line));
+  const picked = useful.find((line) => /insufficient funds|revert|denied|rejected|nonce|underpriced|gas/i.test(line)) || useful[0] || null;
+  if (!picked) return null;
+  if (/insufficient funds/i.test(picked)) return `This wallet does not have enough ETH on ${network().name} for gas.`;
+  if (/user rejected|user denied/i.test(picked)) return "Rejected in the wallet";
+  return picked.replace(/^execution reverted:?\s*/i, "").slice(0, 280);
+}
+
 function explain(error) {
   if (!error) return "Unknown error";
   if (error.validation) return error.message;
-  const code = error.code || error.info?.error?.code;
+  const code = error.code || error.info?.error?.code || error.error?.code;
   if (code === "ACTION_REJECTED" || code === 4001) return "Rejected in the wallet";
   if (error.revert?.name) return ERRORS[error.revert.name] || error.revert.name;
   const data = findRevertData(error);
@@ -145,10 +178,12 @@ function explain(error) {
       }
     }
   }
+  const nested = walletReason(error);
+  if (nested) return nested;
   const message = error.shortMessage || error.reason || error.message || String(error);
-  if (/insufficient funds/i.test(message)) return `This wallet has no ETH on ${network().name} for gas.`;
-  if (/missing revert data/i.test(message)) return `This wallet has no ETH on ${network().name} for gas, or the wallet is on the wrong network.`;
-  return message.replace(/^execution reverted:?\s*/i, "").replace(/missing revert data/gi, "the network rejected the transaction").slice(0, 280);
+  if (/insufficient funds/i.test(message)) return `This wallet does not have enough ETH on ${network().name} for gas.`;
+  if (/could not coalesce|missing revert data/i.test(message)) return "The wallet refused the transaction before it opened.";
+  return message.replace(/^execution reverted:?\s*/i, "").slice(0, 280);
 }
 
 function log(message, kind) {
@@ -1199,27 +1234,36 @@ async function onDeliver() {
     const vaa = state.readyVaa;
     if (!vaa) throw invalid("The signed message is not here yet");
     const signer = await requireSigner();
-    await simulateDeliver(vaa);
     const from = await signer.getAddress();
-    const reader = new ethers.Contract(network().contracts.mailbox, mailboxAbi, provider());
-    let gas = 1_200_000n;
-    try {
-      gas = ((await reader.deliver.estimateGas(vaa, { from })) * 3n) / 2n;
-    } catch {
-      gas = 1_200_000n;
+    await simulateDeliver(vaa);
+    const mailbox = new ethers.Contract(network().contracts.mailbox, mailboxAbi, provider());
+    const gas = ((await mailbox.deliver.estimateGas(vaa, { from })) * 3n) / 2n;
+    const fee = await provider().getFeeData();
+    let maxFee = fee.maxFeePerGas ?? fee.gasPrice ?? 20_000_000n;
+    let priority = fee.maxPriorityFeePerGas ?? 1_000_000n;
+    if (priority > maxFee) priority = maxFee;
+    const balance = await provider().getBalance(from);
+    const cost = gas * maxFee;
+    if (balance < cost) {
+      throw invalid(`This wallet has ${ethers.formatEther(balance)} ETH on ${network().name}. Delivery needs about ${ethers.formatEther(cost)} ETH for gas.`);
     }
-    const mailbox = new ethers.Contract(network().contracts.mailbox, mailboxAbi, signer);
-    try {
-      await send(mailbox.deliver(vaa, { gasLimit: gas }));
-    } catch (error) {
-      const raw = error.shortMessage || error.message || "";
-      if (/could not coalesce|missing revert data/i.test(raw)) {
-        throw invalid(`The wallet could not send the transaction. It needs ETH on ${network().name}.`);
-      }
-      const reason = decodedReason(error);
-      if (reason) throw invalid(reason);
-      throw error;
-    }
+    const data = mailbox.interface.encodeFunctionData("deliver", [vaa]);
+    const hash = await window.ethereum.request({
+      method: "eth_sendTransaction",
+      params: [{
+        from,
+        to: network().contracts.mailbox,
+        data,
+        value: "0x0",
+        gas: ethers.toQuantity(gas),
+        maxFeePerGas: ethers.toQuantity(maxFee),
+        maxPriorityFeePerGas: ethers.toQuantity(priority)
+      }]
+    });
+    log(`tx ${hash}`);
+    const receipt = await provider().waitForTransaction(hash);
+    if (!receipt || receipt.status === 0) throw invalid("The delivery transaction was mined and failed.");
+    noteReceipt(receipt);
   });
 }
 
