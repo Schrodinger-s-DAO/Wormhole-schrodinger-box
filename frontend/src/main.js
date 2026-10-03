@@ -1297,68 +1297,30 @@ async function simulateDeliver(vaa) {
   }
 }
 
-const READD_KEY = "sb-readd-chain";
-
 function walletText(error) {
   return [error?.message, error?.data?.message, walletReason(error)].filter(Boolean).join(" ");
-}
-
-function isEip1559Refusal(error) {
-  return /does not support EIP-1559/i.test(walletText(error));
 }
 
 function isSponsoredRefusal(error) {
   return /EIP-7702|gas included|sponsored/i.test(walletText(error));
 }
 
-async function addCurrentChain() {
-  const current = network();
-  await window.ethereum.request({
-    method: "wallet_addEthereumChain",
-    params: [{
-      chainId: current.hex,
-      chainName: current.name,
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: [current.rpc],
-      blockExplorerUrls: [current.explorer]
-    }]
-  });
-}
-
-async function requestTx(params) {
-  return window.ethereum.request({ method: "eth_sendTransaction", params: [params] });
-}
-
 async function sendDeliver(from, data, gas, gasPrice) {
-  const fresh = sessionStorage.getItem(READD_KEY) === network().key;
-  if (fresh) {
-    await addCurrentChain();
-    sessionStorage.removeItem(READD_KEY);
-  }
-  const fee = await provider().getFeeData();
-  let maxFee = fee.maxFeePerGas ?? gasPrice;
-  let priority = fee.maxPriorityFeePerGas ?? gasPrice;
-  if (priority > maxFee) priority = maxFee;
-  const common = {
-    from,
-    to: network().contracts.mailbox,
-    data,
-    value: "0x0",
-    gas: ethers.toQuantity(gas)
-  };
-  const priced = {
-    ...common,
-    maxFeePerGas: ethers.toQuantity(maxFee),
-    maxPriorityFeePerGas: ethers.toQuantity(priority)
-  };
-  const legacy = { ...common, type: "0x0", gasPrice: ethers.toQuantity(gasPrice) };
-  if (fresh) return requestTx(priced);
   try {
-    return await requestTx(legacy);
+    return await window.ethereum.request({
+      method: "eth_sendTransaction",
+      params: [{
+        from,
+        to: network().contracts.mailbox,
+        data,
+        value: "0x0",
+        gas: ethers.toQuantity(gas),
+        gasPrice: ethers.toQuantity(gasPrice)
+      }]
+    });
   } catch (error) {
-    if (!isEip1559Refusal(error) && !isSponsoredRefusal(error)) throw error;
-    sessionStorage.setItem(READD_KEY, network().key);
-    throw invalid(`Remove ${network().name} from the wallet, then press Deliver again. The page will add it back. Pay the fee in ETH.`);
+    if (!isSponsoredRefusal(error)) throw error;
+    throw invalid("MetaMask tried to sponsor the gas. Open MetaMask, Settings, Advanced, turn off Smart Transactions. Press Deliver again and pay the fee in ETH.");
   }
 }
 
