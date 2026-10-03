@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Schrödinger Box</title>
+    <link rel="icon" href="/mark.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img class="mark" src="/mark.svg" alt="" />
+        <div>
+          <p class="eyebrow">Testnet</p>
+          <h1>Schrödinger <em>Box</em></h1>
+          <p class="sub">Ethereum Sepolia and Base Sepolia only.</p>
+        </div>
+      </div>
+      <div class="wallet">
+        <p id="wallet-line">No wallet in this browser</p>
+        <p id="wallet-chain" class="hint"></p>
+        <button type="button" id="btn-connect">Connect</button>
+      </div>
+    </header>
+
+    <p id="banner" class="banner" hidden></p>
+    <div id="mismatch" class="banner warn" hidden>
+      <p id="mismatch-line"></p>
+      <button type="button" id="btn-switch">Switch network</button>
+    </div>
+
+    <div class="bars">
+      <div class="seg" role="tablist" aria-label="Network">
+        <button type="button" id="chain-sepolia" role="tab" aria-selected="true">Ethereum Sepolia</button>
+        <button type="button" id="chain-base" role="tab" aria-selected="false">Base Sepolia</button>
+      </div>
+      <div class="seg" role="tablist" aria-label="Mode">
+        <button type="button" id="tab-use" role="tab" aria-selected="true">Use</button>
+        <button type="button" id="tab-admin" role="tab" aria-selected="false" hidden>Admin</button>
+      </div>
+    </div>
+    <p id="chain-meta" class="meta">Loading…</p>
+
+    <p id="empty" class="empty" hidden>This network has no box deployment yet.</p>
+
+    <main id="workspace">
+      <section id="use-panel">
+        <div class="layout">
+          <section class="panel">
+            <div class="row spread">
+              <h2>Boxes</h2>
+              <button type="button" id="btn-refresh" class="ghost tiny">Refresh</button>
+            </div>
+            <p class="hint">Open this page in a second browser for a second wallet.</p>
+            <div id="box-list" class="box-list"></div>
+          </section>
+
+          <section class="panel" id="actions">
+            <p id="flash" class="flash" aria-live="polite"></p>
+            <input id="box-id" type="hidden" />
+            <p id="selected-hint" class="hint">Mint a box, or pick one.</p>
+            <div id="contents" class="chips"></div>
+
+            <div class="card faucet" id="practice">
+              <h3>Practice assets</h3>
+              <p class="hint">ETH <span id="asset-eth">—</span> · PAR <span id="asset-par">—</span>. Put them into the open box you picked, or the newest one you hold.</p>
+              <form id="form-par" class="inline">
+                <label>PAR<input id="par-amount" inputmode="decimal" value="100" /></label>
+                <button type="button" id="btn-par-all" class="ghost">All</button>
+                <button type="submit" class="ghost">Mint PAR</button>
+                <button type="button" id="btn-put-par">Put in box</button>
+              </form>
+              <div class="row">
+                <form id="form-cat">
+                  <button type="submit" class="ghost">Mint cat</button>
+                </form>
+              </div>
+              <div id="cat-list" class="chips"></div>
+            </div>
+
+            <form id="form-mint" class="card">
+              <h3>Mint box</h3>
+              <p class="hint">Fee <span id="mint-fee">…</span>.</p>
+              <button type="submit">Mint box</button>
+            </form>
+
+            <form id="form-transfer" class="card" hidden>
+              <h3>Send the shadow</h3>
+              <p class="hint">The wallet that holds this shadow receives the original when it comes home.</p>
+              <label>To<input id="transfer-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+              <div class="row">
+                <button type="submit">Send shadow</button>
+                <button type="button" id="btn-me" class="ghost">Me</button>
+              </div>
+            </form>
+
+            <div class="card span" id="bridge-card">
+              <h3 id="bridge-title">Bridge</h3>
+              <p class="hint">PAR and cats stay on the chain where you deposited them. The other chain only receives the shadow box.</p>
+              <ol id="timeline" class="timeline" hidden>
+                <li id="step-lock">Locked</li>
+                <li id="step-wait">Waiting for Wormhole</li>
+                <li id="step-sign">Signed</li>
+                <li id="step-done">Deliver on the other chain</li>
+              </ol>
+              <p id="delivery-status" class="hint">No message waiting.</p>
+              <form id="form-bridge">
+                <label>Shadow receiver<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+                <p class="hint">Publish fee <span id="bridge-fee">…</span>. Guardians usually sign in 15–20 minutes. Nothing is stuck while you wait.</p>
+                <button type="submit">Lock and send</button>
+              </form>
+              <form id="form-return" hidden>
+                <p class="hint">Burns this shadow. After you deliver the signed message, the original unlocks for this wallet. Publish fee <span id="return-fee">…</span>.</p>
+                <button type="submit">Send home</button>
+              </form>
+              <button type="button" id="btn-deliver" hidden>Deliver signed message</button>
+            </div>
+
+            <details class="card extra">
+              <summary>Other token or NFT</summary>
+              <div class="grid">
+                <form id="form-deposit" class="card">
+                  <h3>Deposit token</h3>
+                  <p class="hint">Allowance <span id="asset-allowance">—</span></p>
+                  <label>Token<input id="dep-token" data-token spellcheck="false" autocomplete="off" /></label>
+                  <label>Amount<input id="dep-amount" inputmode="decimal" placeholder="100" /></label>
+                  <div class="row">
+                    <button type="submit">Deposit</button>
+                    <button type="button" id="btn-max" class="ghost">Max</button>
+                  </div>
+                </form>
+
+                <form id="form-withdraw-token" class="card">
+                  <h3>Withdraw token</h3>
+                  <p class="hint">Withdraws the full balance of that token.</p>
+                  <label>Token<input id="wd-token" data-token spellcheck="false" autocomplete="off" /></label>
+                  <button type="submit">Withdraw</button>
+                </form>
+
+                <form id="form-deposit-nft" class="card">
+                  <h3>Deposit NFT</h3>
+                  <label>Contract<input id="dep-nft" data-nft spellcheck="false" autocomplete="off" /></label>
+                  <label>Token id<input id="dep-nft-id" inputmode="numeric" placeholder="1" /></label>
+                  <button type="submit">Deposit NFT</button>
+                </form>
+
+                <form id="form-withdraw-nft" class="card">
+                  <h3>Withdraw NFT</h3>
+                  <label>Contract<input id="wd-nft" data-nft spellcheck="false" autocomplete="off" /></label>
+                  <label>Token id<input id="wd-nft-id" inputmode="numeric" placeholder="1" /></label>
+                  <button type="submit">Withdraw NFT</button>
+                </form>
+              </div>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <section id="admin-panel" hidden>
+        <section class="panel">
+          <h2>Admin</h2>
+          <p id="owner-line" class="hint">Owner only.</p>
+          <p class="hint">Fee collector <span id="fc-line">…</span> · <span id="fc-balance">…</span> ETH</p>
+          <div class="grid">
+            <form id="form-fee" class="card">
+              <h3>Mint fee</h3>
+              <label>ETH<input id="fee-input" inputmode="decimal" placeholder="0" /></label>
+              <button type="submit" class="ghost">Set fee</button>
+            </form>
+            <form id="form-collector" class="card">
+              <h3>Fee collector</h3>
+              <label>Address<input id="collector-input" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+              <button type="submit" class="ghost">Set collector</button>
+            </form>
+            <form id="form-trust" class="card">
+              <h3>Trusted box</h3>
+              <label>Wormhole chain id<input id="trust-chain" inputmode="numeric" /></label>
+              <label>Box address<input id="trust-addr" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+              <div class="row">
+                <button type="submit" class="ghost">Trust</button>
+                <button type="button" id="btn-trust-peer" class="ghost">Other chain</button>
+              </div>
+            </form>
+            <form id="form-withdraw-eth" class="card">
+              <h3>Collector ETH</h3>
+              <button type="submit" class="ghost">Withdraw ETH</button>
+            </form>
+            <form id="form-fc-token" class="card">
+              <h3>Collector token</h3>
+              <label>Token<input id="fc-token" data-token spellcheck="false" autocomplete="off" /></label>
+              <label>Amount<input id="fc-amount" inputmode="decimal" placeholder="1" /></label>
+              <button type="submit" class="ghost">Withdraw token</button>
+            </form>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel log-panel">
+        <h2>Log</h2>
+        <ol id="log" aria-live="polite"></ol>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
