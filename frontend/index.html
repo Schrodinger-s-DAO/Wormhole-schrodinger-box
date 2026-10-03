@@ -114,8 +114,23 @@
                 <button type="button" id="btn-deliver" hidden>Deliver signed message</button>
               </div>
 
+              <form id="form-transfer" hidden>
+                <h3 id="transfer-title">Move this box</h3>
+                <p id="transfer-hint" class="hint">Sends this folder to another wallet on this chain. Nothing is bridged.</p>
+                <label>To<input id="transfer-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+                <div class="row">
+                  <button type="submit" id="transfer-submit">Send box</button>
+                  <button type="button" id="btn-me" class="ghost">Me</button>
+                </div>
+              </form>
+
               <div id="fill-tools" hidden>
-                <button type="button" id="btn-put-par">Put PAR in this box</button>
+                <form id="form-put-par" class="inline">
+                  <label>Amount<input id="put-par-amount" inputmode="decimal" value="100" /></label>
+                  <button type="button" id="btn-put-par-all" class="ghost">All</button>
+                  <button type="submit">Put PAR in this box</button>
+                </form>
+                <p class="hint">In this wallet: <span id="put-par-balance">—</span> PAR.</p>
                 <div id="cat-list" class="chips"></div>
                 <form id="form-bridge">
                   <label>Who receives the shadow<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
@@ -123,16 +138,6 @@
                   <button type="submit">Bridge to the other chain</button>
                 </form>
               </div>
-
-              <form id="form-transfer" hidden>
-                <h3>Move the shadow</h3>
-                <p class="hint">The wallet that holds this shadow receives the original when it comes home.</p>
-                <label>To<input id="transfer-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
-                <div class="row">
-                  <button type="submit">Send shadow</button>
-                  <button type="button" id="btn-me" class="ghost">Me</button>
-                </div>
-              </form>
               <form id="form-return" hidden>
                 <p class="hint">Destroys this shadow. After delivery, this wallet receives the folder on the original chain. Publish fee <span id="return-fee">…</span>.</p>
                 <button type="submit">Destroy shadow</button>

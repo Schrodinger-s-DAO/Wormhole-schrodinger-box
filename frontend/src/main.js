@@ -815,7 +815,14 @@ function paintForms() {
   $("fill-tools").hidden = !openMine;
   $("more-assets").hidden = !openMine;
   $("form-return").hidden = !shadowMine;
-  $("form-transfer").hidden = !shadowMine;
+  $("form-transfer").hidden = !yours;
+  if (yours) {
+    $("transfer-title").textContent = shadowMine ? "Move the shadow" : "Move this box";
+    $("transfer-hint").textContent = shadowMine
+      ? "The wallet that holds this shadow receives the original when it comes home."
+      : "Sends this folder to another wallet on this chain. Nothing is bridged.";
+    $("transfer-submit").textContent = shadowMine ? "Send shadow" : "Send box";
+  }
   const foreign = $("box-foreign");
   if (!item || yours) {
     foreign.hidden = true;
@@ -1057,6 +1064,7 @@ async function refreshAssets() {
   if (!state.account || !network().contracts) {
     $("asset-eth").textContent = "—";
     $("asset-par").textContent = "—";
+    $("put-par-balance").textContent = "—";
     $("asset-allowance").textContent = "—";
     $("cat-list").replaceChildren();
     state.parBalance = 0n;
@@ -1078,6 +1086,7 @@ async function refreshAssets() {
   state.cats = cats;
   $("asset-eth").textContent = formatAmount(eth);
   $("asset-par").textContent = formatAmount(par);
+  $("put-par-balance").textContent = formatAmount(par);
   $("asset-allowance").textContent = formatAmount(allowance);
   const chips = $("cat-list");
   chips.replaceChildren();
@@ -1217,7 +1226,7 @@ async function onMintBox() {
 async function parAmount() {
   let amount;
   try {
-    amount = ethers.parseUnits($("par-amount").value.trim() || "0", 18);
+    amount = ethers.parseUnits($("put-par-amount").value.trim() || "0", 18);
   } catch {
     throw invalid("PAR amount is invalid");
   }
@@ -1575,6 +1584,7 @@ function bind() {
     "form-withdraw-token": onWithdrawToken,
     "form-deposit-nft": onDepositNft,
     "form-withdraw-nft": onWithdrawNft,
+    "form-put-par": onPutPar,
     "form-transfer": onTransfer,
     "form-bridge": onBridge,
     "form-return": onReturn,
@@ -1607,7 +1617,9 @@ function bind() {
   $("btn-par-all").addEventListener("click", () => {
     $("par-amount").value = ethers.formatUnits(state.parBalance, 18);
   });
-  $("btn-put-par").addEventListener("click", onPutPar);
+  $("btn-put-par-all").addEventListener("click", () => {
+    $("put-par-amount").value = ethers.formatUnits(state.parBalance, 18);
+  });
   $("btn-deliver").addEventListener("click", onDeliver);
   $("btn-trust-peer").addEventListener("click", () => {
     const other = otherNetwork(state.networkKey);
