@@ -6,7 +6,7 @@ A Schrödinger Box is that binder, made programmable: an NFT that bundles hetero
 
 It earns its name in transit. Value cannot leave the chain it was born on, so when a Box crosses chains the original locks in place and a shadow box appears on the far side, identical down to the last holding. For the length of the crossing two boxes exist: one frozen, one live, the same identity split by the bridge. Exactly one is ever alive, so a Box can never be spent twice. The paradox is the safety property.
 
-The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Ethereum Sepolia and Base Sepolia, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md).
+The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Ethereum Sepolia and Base Sepolia, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md). What still has to happen before mainnet is in [ROADMAP.md](ROADMAP.md).
 
 ## Schrodinger Box
 
@@ -47,19 +47,19 @@ npx hardhat test --network sepolia
 ## Bridge Behavior
 
 - Bridging locks the original box. That locked box cannot be transferred, and its assets stay on the chain where they were deposited.
-- The destination mints a shadow with its own token id and records `originBoxId`. The shadow can be transferred. It cannot deposit or withdraw.
+- The destination mints a shadow with its own token id and records `originBoxId`. The shadow stores the content hash computed on the origin and does not call the assets. The shadow can be transferred. It cannot deposit or withdraw.
 - Sending the shadow home burns it, unlocks the original, and gives that original to the address chosen on the return. The local tests in `test/SchrodingerBox.bridge.test.js` run this round trip against a mock relayer.
 
 ## Deployments
 
-Both chains were deployed on 4 October 2026 and each box trusts only the other. `freezeConfig` has been called on both boxes and both mailboxes. Source is not verified on the explorers: this environment has no Etherscan or Basescan API key. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`.
+Both chains were deployed on 4 October 2026 and each box trusts only the other. `freezeConfig` has not been called. That is intentional: the deploy key stays the owner, so a peer can be replaced without another deploy. Delivery stores the content hash from the origin and does not call the assets. Source is not verified on the explorers: this environment has no Etherscan or Basescan API key. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`. The previous pair is in [SECURITY.md](SECURITY.md). A box already in flight on that pair cannot be delivered, because the payload now carries the hash.
 
 | Network | Contract | Address |
 |---------|----------|---------|
-| Ethereum Sepolia | SchrodingerBox | [`0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9`](https://sepolia.etherscan.io/address/0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9) |
-| Ethereum Sepolia | WormholeMailbox | [`0x03a41E5f28e05C469761dD42216B1E12F2C00b32`](https://sepolia.etherscan.io/address/0x03a41E5f28e05C469761dD42216B1E12F2C00b32) |
-| Base Sepolia | SchrodingerBox | [`0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2`](https://sepolia.basescan.org/address/0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2) |
-| Base Sepolia | WormholeMailbox | [`0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b`](https://sepolia.basescan.org/address/0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b) |
+| Ethereum Sepolia | SchrodingerBox | [`0x9E155f89D90EdC5C4904D2D489dE7a7F9E004Ec8`](https://sepolia.etherscan.io/address/0x9E155f89D90EdC5C4904D2D489dE7a7F9E004Ec8) |
+| Ethereum Sepolia | WormholeMailbox | [`0x7951C9eD7383EA217D993415C8f02FB5914A6e9F`](https://sepolia.etherscan.io/address/0x7951C9eD7383EA217D993415C8f02FB5914A6e9F) |
+| Base Sepolia | SchrodingerBox | [`0x8F815921E7817c77C0fc5c59D4Ac71b247A6A8Ec`](https://sepolia.basescan.org/address/0x8F815921E7817c77C0fc5c59D4Ac71b247A6A8Ec) |
+| Base Sepolia | WormholeMailbox | [`0x3482419026F5a088aA419f617249395dF639817B`](https://sepolia.basescan.org/address/0x3482419026F5a088aA419f617249395dF639817B) |
 
 ## Environments & Deployment
 
@@ -70,6 +70,8 @@ Both chains were deployed on 4 October 2026 and each box trusts only the other. 
 ```bash
 node scripts/deployTestnets.js
 ```
+
+`deployTestnets.js` does not call `freezeConfig`. That is intentional on testnet. The deploy key stays the owner, so a peer can be replaced without another deploy. Mainnet calls the freeze; that requirement is in [ROADMAP.md](ROADMAP.md).
 
 ## License & Credits
 

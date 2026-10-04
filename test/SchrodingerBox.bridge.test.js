@@ -185,13 +185,14 @@ describe("SchrodingerBox bridge", function () {
 
     const stored = await origin.boxes(originBoxId);
     const payload = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint8", "uint256", "tuple(tuple(address,uint256,uint256,uint8)[],bool,uint16,bool,uint256,bytes32,uint256)", "address", "bytes32"],
+      ["uint8", "uint256", "tuple(tuple(address,uint256,uint256,uint8)[],bool,uint16,bool,uint256,bytes32,uint256)", "address", "bytes32", "bytes32"],
       [
         2,
         originBoxId,
         [[], false, ORIGIN_CHAIN, false, 0, ethers.id("wrong"), originBoxId],
         alice.address,
-        ethers.id("return")
+        ethers.id("return"),
+        ethers.ZeroHash
       ]
     );
     await expect(
@@ -226,6 +227,29 @@ describe("SchrodingerBox bridge", function () {
     await sendHome(relayer, origin, dest, alice, shadowId);
     expect(await origin.sealState(originBoxId)).to.equal(before + 1n);
     expect(await origin.isSealed(originBoxId)).to.equal(true);
+  });
+
+  it("delivers a shadow when the destination cannot read the nested hash", async function () {
+    const { alice, relayer, origin, dest } = await deployPair();
+    const hostile = await (await ethers.getContractFactory("DestHostileSealable")).deploy();
+    await hostile.setHostileTo(await dest.getAddress());
+    await hostile.mint(alice.address, 1);
+    const originBoxId = await mintBox(origin, alice);
+    const originAddress = await origin.getAddress();
+    await hostile.connect(alice).setApprovalForAll(originAddress, true);
+    await origin.connect(alice).depositNFT(originBoxId, await hostile.getAddress(), 1);
+    await origin.connect(alice).seal(originBoxId);
+    const originHash = await origin.contentHash(originBoxId);
+
+    const shadowId = await bridge(relayer, origin, dest, alice, originBoxId, alice.address);
+    expect(await dest.contentHash(shadowId)).to.equal(originHash);
+    expect((await origin.getBoxDetails(originBoxId)).isLocked).to.equal(true);
+    expect(await dest.isSealed(shadowId)).to.equal(true);
+
+    await sendHome(relayer, origin, dest, alice, shadowId);
+    expect(await origin.ownerOf(originBoxId)).to.equal(alice.address);
+    expect((await origin.getBoxDetails(originBoxId)).isLocked).to.equal(false);
+    await expect(dest.ownerOf(shadowId)).to.be.reverted;
   });
 
   it("gives the original to the receiver named on the return", async function () {

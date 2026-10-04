@@ -70,6 +70,29 @@ describe("SchrodingerBox content hash", function () {
     expect(await token.balanceOf(boxAddress)).to.equal(1n);
   });
 
+  it("reverts the seal when an external container sits past the fourth level", async function () {
+    const { box, alice } = await deploy();
+    const boxAddress = await box.getAddress();
+    const probe = await (await ethers.getContractFactory("ProbeSealable")).deploy();
+    await probe.mint(alice.address, 1);
+    await probe.connect(alice).setApprovalForAll(boxAddress, true);
+    await box.connect(alice).setApprovalForAll(boxAddress, true);
+
+    const ids = [];
+    for (let i = 0; i < 5; i++) {
+      const id = await box.connect(alice).mintBox.staticCall();
+      await box.connect(alice).mintBox();
+      ids.push(id);
+    }
+    await box.connect(alice).depositNFT(ids[4], await probe.getAddress(), 1);
+    await box.connect(alice).seal(ids[4]);
+    for (let i = 4; i > 0; i--) {
+      await box.connect(alice).depositNFT(ids[i - 1], boxAddress, ids[i]);
+      if (i > 1) await box.connect(alice).seal(ids[i - 1]);
+    }
+    await expect(box.connect(alice).seal(ids[0])).to.be.revertedWithCustomError(box, "ExternalTooDeep");
+  });
+
   it("reverts the seal when an external container does not return a hash", async function () {
     const { box, alice } = await deploy();
     const heavy = await (await ethers.getContractFactory("GasHeavySealable")).deploy();

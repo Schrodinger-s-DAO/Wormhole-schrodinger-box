@@ -234,10 +234,9 @@ async function wire(sepoliaSigner, baseSigner, sepolia, base) {
     throw new Error("quote did not return the core fee of 0; the mailbox is not wired to core");
   }
 
-  await freeze(sepoliaBox, "sepolia box");
-  await freeze(baseBox, "base box");
-  await freeze(sepoliaMail, "sepolia mailbox");
-  await freeze(baseMail, "base mailbox");
+  // Testnet leaves the config open on purpose. The deploy key stays owner so a
+  // wrong peer can be replaced without another deploy. Mainnet must call freezeConfig.
+  console.log("  testnet config left open");
 }
 
 async function freeze(contract, label) {

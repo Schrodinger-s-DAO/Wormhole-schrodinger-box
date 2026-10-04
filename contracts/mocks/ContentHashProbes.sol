@@ -23,6 +23,66 @@ contract ProbeERC20 is ERC20 {
 }
 
 /// @notice Claims `ISealable` and spends more gas than the external hash cap.
+/// @notice A sealed container with a cheap, stable hash.
+contract ProbeSealable is ERC721, ISealable {
+    constructor() ERC721("Probe Seal", "PSEAL") {}
+
+    function mint(address to, uint256 tokenId) external {
+        _mint(to, tokenId);
+    }
+
+    function isSealed(uint256 tokenId) public view returns (bool) {
+        require(_ownerOf(tokenId) != address(0), "missing");
+        return true;
+    }
+
+    function sealState(uint256) public pure returns (uint256) {
+        return 1;
+    }
+
+    function contentHash(uint256 tokenId) public pure returns (bytes32) {
+        return keccak256(abi.encode(tokenId));
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(ISealable).interfaceId || super.supportsInterface(interfaceId);
+    }
+}
+
+/// @notice `contentHash` reverts when the caller is `hostileTo`.
+/// @dev The destination box is that caller. The origin is not, so sealing and bridging succeed.
+contract DestHostileSealable is ERC721, ISealable {
+    address public hostileTo;
+
+    constructor() ERC721("Hostile", "HSTL") {}
+
+    function setHostileTo(address dest) external {
+        hostileTo = dest;
+    }
+
+    function mint(address to, uint256 tokenId) external {
+        _mint(to, tokenId);
+    }
+
+    function isSealed(uint256 tokenId) public view returns (bool) {
+        require(_ownerOf(tokenId) != address(0), "missing");
+        return true;
+    }
+
+    function sealState(uint256) public pure returns (uint256) {
+        return 1;
+    }
+
+    function contentHash(uint256 tokenId) public view returns (bytes32) {
+        require(msg.sender != hostileTo, "destination");
+        return keccak256(abi.encode(tokenId, hostileTo));
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(ISealable).interfaceId || super.supportsInterface(interfaceId);
+    }
+}
+
 contract GasHeavySealable is ERC721, ISealable {
     constructor() ERC721("Heavy", "HVY") {}
 

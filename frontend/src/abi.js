@@ -92,6 +92,7 @@ export const boxAbi = [
   "error NonceMismatch()",
   "error ExternalHashFailed()",
   "error TooManyExternalSeals()",
+  "error ExternalTooDeep()",
   "error ConfigFrozen()",
   "error ReentrancyGuardReentrantCall()",
   ...ownableErrors,

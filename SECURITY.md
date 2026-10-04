@@ -158,7 +158,7 @@ Atomic Barter's escrow used to store only the NFT address and token id. The owne
 
 `setTrustedContract` on the box and `setPeer` on the mailbox choose who is allowed to deliver a return. A later call could point that at a sender the key holder controls, unlock any locked original, and take it.
 
-**Mitigation:** `freezeConfig()` on each contract is irreversible. After it, those two functions revert. `setBox` on the mailbox was already one-shot. The contracts do not freeze themselves. A deployment is mitigated only after the owner calls `freezeConfig`, once the peers are set. These testnet addresses have called it. A deployment that needs to rotate peers later should put the owner behind a multisig and a timelock, not a single key. `test/SchrodingerBox.bridge.test.js` and `test/WormholeMailbox.test.js` cover the freeze.
+**Mitigation:** `freezeConfig()` on each contract is irreversible. After it, those two functions revert. `setBox` on the mailbox was already one-shot. The contracts do not freeze themselves. This testnet deploy does not call `freezeConfig`. That is intentional: the deploy key can replace a peer without another deploy. It is not a step the script forgot. Mainnet puts the owner behind a multisig and a timelock, and the deploy script calls the freeze. That work is listed in [ROADMAP.md](ROADMAP.md) and is not in this deployment. `test/SchrodingerBox.bridge.test.js` and `test/WormholeMailbox.test.js` cover the freeze.
 
 ## L-04 — The fee quote fallback breaks the bridge
 
@@ -238,7 +238,7 @@ The README, this file, `frontend/src/live.json`, and `deployed_contracts.json` u
 
 **Status:** Mitigated
 
-The box and the mailbox use `Ownable2Step`. The deploy script reverts unless `configFrozen()` is true on both boxes and both mailboxes after `freezeConfig`. No multisig address was designated, so the owner is still the deploy key. That key stays until a deploy that is not a testnet. Ownership can move later with `transferOwnership` and `acceptOwnership`.
+The box and the mailbox use `Ownable2Step`. `freezeConfig` is still in the contracts and is irreversible once called. This testnet deploy does not call it, on purpose, so the deploy key can replace a peer without another deploy. The script does not revert when `configFrozen()` is false. No multisig address was designated, so the owner is still the deploy key. The key cannot take assets out of a box. A mainnet deploy moves that owner to a multisig, puts a timelock on parameter changes, and calls `freezeConfig` from the script. That is in [ROADMAP.md](ROADMAP.md), not in this deployment. Ownership can move later with `transferOwnership` and `acceptOwnership`.
 
 External `contentHash` reads use a 50,000 gas `staticcall`. A contract that claims `ISealable` and does not return inside that cap makes `seal` revert `ExternalHashFailed`. It does not contribute a zero hash.
 
@@ -246,10 +246,10 @@ External `contentHash` reads use a 50,000 gas `staticcall`. A contract that clai
 
 | Chain | Box | Mailbox |
 |-------|-----|---------|
-| Ethereum Sepolia | `0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9` | `0x03a41E5f28e05C469761dD42216B1E12F2C00b32` |
-| Base Sepolia | `0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2` | `0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b` |
+| Ethereum Sepolia | `0x9E155f89D90EdC5C4904D2D489dE7a7F9E004Ec8` | `0x7951C9eD7383EA217D993415C8f02FB5914A6e9F` |
+| Base Sepolia | `0x8F815921E7817c77C0fc5c59D4Ac71b247A6A8Ec` | `0x3482419026F5a088aA419f617249395dF639817B` |
 
-Both chains were deployed on 4 October 2026 from the source in this repository. Each box trusts only the other, and `freezeConfig` has been called on both boxes and both mailboxes. `seal` stores `contentHash`. The explorers do not show a verified source: this environment has no Etherscan or Basescan API key.
+Both chains were deployed on 4 October 2026 from the source in this repository. Each box trusts only the other. `freezeConfig` has not been called on the boxes or the mailboxes. That is intentional on this testnet, so the deploy key can replace a peer without another deploy. `seal` stores `contentHash`, and delivery stores that same word from the payload instead of calling the assets. The explorers do not show a verified source: this environment has no Etherscan or Basescan API key.
 
 ## Previous deployments
 
@@ -264,6 +264,8 @@ These boxes are still on chain. They are not peers of the pair above. An escrow 
 | Base Sepolia | `0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3` | Has `contentHash`. External hash reads have no gas cap. |
 | Ethereum Sepolia | `0xe8De9D30ae05f176b5970559ad961958A5447831` | Computes `contentHash` on every read. An external hash that runs out of gas becomes zero. |
 | Base Sepolia | `0x53C3fAa5029a7FfD23DaAA737C8E6524992fe9Ee` | Computes `contentHash` on every read. An external hash that runs out of gas becomes zero. |
+| Ethereum Sepolia | `0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9` | Stores `contentHash` at seal, then recomputes it on delivery. An external container can revert that delivery and leave the original locked. Mailbox `0x03a41E5f28e05C469761dD42216B1E12F2C00b32`. A box already in flight on this pair cannot be delivered. |
+| Base Sepolia | `0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2` | Stores `contentHash` at seal, then recomputes it on delivery. An external container can revert that delivery and leave the original locked. Mailbox `0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b`. A box already in flight on this pair cannot be delivered. |
 
 ## Trust model
 
@@ -276,7 +278,7 @@ These boxes are still on chain. They are not peers of the pair above. An escrow 
 
 1. `bridgeBox` quotes the fee, publishes through the mailbox, then moves the original to this contract and sets `isLocked`.
 2. The mailbox publishes with `CONSISTENCY_LEVEL = 1` and records the sequence.
-3. On the destination, `deliver` checks the guardian signatures, the peer, the target chain, and the target box. The sequence is stored before the box is called. If the box reverts, the stored sequence rolls back with the transaction.
+3. On the destination, `deliver` checks the guardian signatures, the peer, the target chain, and the target box. The sequence is stored before the box is called. If the box reverts, the stored sequence rolls back with the transaction. Action 1 stores the content hash from the payload. It does not call the assets, because those contracts are not on this chain. A failed hash on the origin reverts `bridgeBox` before the lock.
 4. The box also rejects a `messageNonce` it has already applied. That is a second replay check, on the payload, separate from the mailbox sequence.
 5. A return burns the shadow when the message is published. Anyone can deliver that VAA. If delivery fails, it can be retried. The original stays locked until a delivery succeeds.
 
@@ -323,6 +325,8 @@ Use Private vulnerability reporting on this GitHub repository (Settings, Securit
 | Inner box cannot be touched while nested (SB-11) | `test/SchrodingerBox.audit-poc.test.js` |
 | A full box and a four-level nest stay under 50_000 gas once sealed | `test/SchrodingerBox.content-hash.test.js` |
 | An external hash that does not return reverts the seal | `test/SchrodingerBox.content-hash.test.js` |
+| An external container past the fourth level reverts the seal | `test/SchrodingerBox.content-hash.test.js` |
+| Delivery stores the origin hash and does not call the assets | `test/SchrodingerBox.bridge.test.js` |
 | Mailbox verifies the VAA, the peer, and replay | `test/WormholeMailbox.test.js` |
 
 ## Residual risk
