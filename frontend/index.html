@@ -139,12 +139,13 @@
                 <div id="cat-list" class="chips"></div>
                 <form id="form-bridge">
                   <label>Who receives the shadow<input id="bridge-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
-                  <p class="hint">Publish fee <span id="bridge-fee">…</span>. Guardians usually sign in 15–20 minutes.</p>
+                  <p class="hint">Type that address again before the transaction. A contract that cannot move the box can leave it stuck. Publish fee <span id="bridge-fee">…</span>. Guardians usually sign in 15–20 minutes.</p>
                   <button type="submit">Bridge to the other chain</button>
                 </form>
               </div>
               <form id="form-return" hidden>
-                <p class="hint">Destroys this shadow. After delivery, this wallet receives the folder on the original chain. Publish fee <span id="return-fee">…</span>.</p>
+                <label>Who receives the original<input id="return-to" spellcheck="false" autocomplete="off" placeholder="0x…" /></label>
+                <p class="hint">This address receives the folder on the chain it came from. Type it again before the transaction. A contract with no code there can lose the box. Publish fee <span id="return-fee">…</span>.</p>
                 <button type="submit">Destroy shadow</button>
               </form>
             </div>
@@ -154,6 +155,7 @@
               <div class="grid">
                 <form id="form-deposit" class="card">
                   <h3>Deposit token</h3>
+                  <p class="hint">A token whose balance changes by itself, or that can block this contract, is not supported. The amount in the box can end up wrong or stuck.</p>
                   <p class="hint">Allowance <span id="asset-allowance">—</span></p>
                   <label>Token<input id="dep-token" data-token spellcheck="false" autocomplete="off" /></label>
                   <label>Amount<input id="dep-amount" inputmode="decimal" placeholder="100" /></label>
@@ -172,6 +174,7 @@
 
                 <form id="form-deposit-nft" class="card">
                   <h3>Deposit NFT</h3>
+                  <p class="hint">Sealing freezes the list, not the value inside. An account or an upgradeable NFT can still change after it is deposited.</p>
                   <label>Contract<input id="dep-nft" data-nft spellcheck="false" autocomplete="off" /></label>
                   <label>Token id<input id="dep-nft-id" inputmode="numeric" placeholder="1" /></label>
                   <button type="submit">Deposit NFT</button>

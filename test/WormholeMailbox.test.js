@@ -79,7 +79,7 @@ describe("WormholeMailbox", function () {
     expect((await origin.getBoxDetails(boxId)).isLocked).to.equal(true);
     expect(await origin.ownerOf(boxId)).to.equal(await origin.getAddress());
 
-    await dest.connect(alice).returnShadowBox(shadowId);
+    await dest.connect(alice).returnShadowBox(shadowId, alice.address);
     await originMail.deliver(await publishedVaa(destCore, destMail, DEST_CHAIN));
 
     await expect(dest.ownerOf(shadowId)).to.be.reverted;

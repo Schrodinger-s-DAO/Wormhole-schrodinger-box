@@ -382,17 +382,31 @@ export async function onDeliver() {
   });
 }
 
+async function confirmReceiver(raw) {
+  const receiver = parseAddress(raw, "Receiver");
+  const code = await provider().getCode(receiver);
+  if (code && code !== "0x") {
+    window.alert(`${receiver} is a contract. If it cannot move this box, the box can stay stuck there.`);
+  }
+  const again = window.prompt(`Type this receiver again to confirm:\n${receiver}`);
+  if (!again || again.trim().toLowerCase() !== receiver.toLowerCase()) {
+    throw invalid("The address you typed does not match the receiver.");
+  }
+  return receiver;
+}
+
 export async function onBridge() {
   await run("Bridge", async () => {
     const other = otherNetwork(state.networkKey);
     if (!other.contracts) throw invalid(`${other.name} has no box to receive the shadow`);
+    const receiver = await confirmReceiver($("bridge-to").value);
     const signer = await requireSigner();
     const box = currentBox(signer);
     const id = selectedId();
     const details = await box.getBoxDetails(id);
     const count = BigInt(details.assets.length);
     const fee = await box.getFunction("getWormholeFee(uint16,uint256)")(other.wormholeId, count);
-    await send(box.bridgeBox(other.wormholeId, parseAddress($("bridge-to").value, "Receiver"), id, {
+    await send(box.bridgeBox(other.wormholeId, receiver, id, {
       value: fee
     }));
   });
@@ -411,14 +425,15 @@ export async function onReturn() {
       throw invalid(decodedReason(error) || "That shadow is already gone.");
     }
     if (details.isOriginal) throw invalid("Only a shadow can be destroyed.");
+    const receiver = await confirmReceiver($("return-to").value);
     const count = BigInt(details.assets.length);
     const fee = await box.getFunction("getWormholeFee(uint16,uint256)")(Number(details.originChain), count);
     try {
-      await box.returnShadowBox.staticCall(id, { from, value: fee });
+      await box.returnShadowBox.staticCall(id, receiver, { from, value: fee });
     } catch (error) {
       throw invalid(decodedReason(error) || "Destroy was rejected, and the network did not say why.");
     }
-    const gas = ((await box.returnShadowBox.estimateGas(id, { from, value: fee })) * 3n) / 2n;
+    const gas = ((await box.returnShadowBox.estimateGas(id, receiver, { from, value: fee })) * 3n) / 2n;
     const feeData = await provider().getFeeData();
     const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 20_000_000n;
     const balance = await provider().getBalance(from);
@@ -426,7 +441,7 @@ export async function onReturn() {
     if (balance < cost) {
       throw invalid(`This wallet has ${ethers.formatEther(balance)} ETH on ${network().name}. Destroy needs about ${ethers.formatEther(cost)} ETH.`);
     }
-    const data = box.interface.encodeFunctionData("returnShadowBox", [id]);
+    const data = box.interface.encodeFunctionData("returnShadowBox", [id, receiver]);
     const hash = await sendPriced(from, network().contracts.box, data, fee, gas, gasPrice);
     log(`tx ${hash}`);
     const receipt = await provider().waitForTransaction(hash);

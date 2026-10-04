@@ -57,7 +57,7 @@ async function bridge(relayer, origin, dest, signer, boxId, receiver) {
 }
 
 async function sendHome(relayer, origin, dest, signer, shadowId) {
-  await dest.connect(signer).returnShadowBox(shadowId);
+  await dest.connect(signer).returnShadowBox(shadowId, signer.address);
   await relayer.deliver(await origin.getAddress(), DEST_CHAIN, asBytes32(await dest.getAddress()));
 }
 
@@ -226,6 +226,22 @@ describe("SchrodingerBox bridge", function () {
     await sendHome(relayer, origin, dest, alice, shadowId);
     expect(await origin.sealState(originBoxId)).to.equal(before + 1n);
     expect(await origin.isSealed(originBoxId)).to.equal(true);
+  });
+
+  it("refuses to deliver a box to the trusted box contract", async function () {
+    const { alice, relayer, origin, dest } = await deployPair();
+    const originBoxId = await mintBox(origin, alice);
+    await expect(
+      origin.connect(alice).bridgeBox(DEST_CHAIN, await dest.getAddress(), originBoxId)
+    ).to.be.revertedWithCustomError(origin, "InvalidAddress");
+
+    const shadowId = await bridge(relayer, origin, dest, alice, originBoxId, alice.address);
+    await expect(
+      dest.connect(alice).returnShadowBox(shadowId, ethers.ZeroAddress)
+    ).to.be.revertedWithCustomError(dest, "InvalidAddress");
+    await expect(
+      dest.connect(alice).returnShadowBox(shadowId, await origin.getAddress())
+    ).to.be.revertedWithCustomError(dest, "InvalidAddress");
   });
 
   it("refuses to replace a trusted contract after the config is frozen", async function () {

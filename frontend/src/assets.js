@@ -224,10 +224,33 @@ export async function onWithdrawToken() {
   });
 }
 
+const PROXY_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a618b3c30b4a7c9c00";
+
+async function nftAccountWarning(nftAddress) {
+  const notes = [];
+  try {
+    const slot = await provider().getStorage(nftAddress, PROXY_SLOT);
+    if (slot && slot !== ethers.ZeroHash) {
+      notes.push("This NFT contract looks like an EIP-1967 proxy. Its admin can change what the token does after you deposit it.");
+    }
+  } catch {
+    /* A failed storage read is not evidence either way. */
+  }
+  try {
+    const account = new ethers.Contract(nftAddress, ["function token() view returns (uint256,address,uint256)"], provider());
+    await account.token();
+    notes.push("This contract answers like an ERC-6551 account. What it holds can change without a deposit or a withdrawal.");
+  } catch {
+    /* Not an account. */
+  }
+  if (notes.length > 0) window.alert(notes.join("\n\n"));
+}
+
 export async function onDepositNft() {
   await run("Deposit NFT", async () => {
     const signer = await requireSigner();
     const nftAddress = parseAddress($("dep-nft").value, "NFT contract");
+    await nftAccountWarning(nftAddress);
     const tokenId = parseId($("dep-nft-id").value, "Token id");
     const nft = new ethers.Contract(nftAddress, nftAbi, signer);
     const owner = await signer.getAddress();

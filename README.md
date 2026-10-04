@@ -48,18 +48,18 @@ npx hardhat test --network sepolia
 
 - Bridging locks the original box. That locked box cannot be transferred, and its assets stay on the chain where they were deposited.
 - The destination mints a shadow with its own token id and records `originBoxId`. The shadow can be transferred. It cannot deposit or withdraw.
-- Sending the shadow home burns it, unlocks the original, and gives that original to the account that sent it home. The local tests in `test/SchrodingerBox.bridge.test.js` run this round trip against a mock relayer.
+- Sending the shadow home burns it, unlocks the original, and gives that original to the address chosen on the return. The local tests in `test/SchrodingerBox.bridge.test.js` run this round trip against a mock relayer.
 
 ## Deployments
 
-Sepolia was redeployed on 4 October 2026. Base Sepolia is the previous contract and was not redeployed. The new Sepolia box does not trust that Base box, so a bridge message cannot be delivered there until Base is deployed again. Source is not verified on the explorers yet. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`.
+Both chains were deployed on 4 October 2026 and each box trusts only the other. `freezeConfig` has been called on both boxes and both mailboxes. Source is not verified on the explorers: this environment has no Etherscan or Basescan API key. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`.
 
 | Network | Contract | Address |
 |---------|----------|---------|
-| Ethereum Sepolia | SchrodingerBox | [`0x29733d284ba67EC96D43966C575f26437aF0aF73`](https://sepolia.etherscan.io/address/0x29733d284ba67EC96D43966C575f26437aF0aF73) |
-| Ethereum Sepolia | WormholeMailbox | [`0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7`](https://sepolia.etherscan.io/address/0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7) |
-| Base Sepolia | SchrodingerBox | [`0xbC727Eda544c08395A59A4b5e5865375b955be12`](https://sepolia.basescan.org/address/0xbC727Eda544c08395A59A4b5e5865375b955be12) |
-| Base Sepolia | WormholeMailbox | [`0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732`](https://sepolia.basescan.org/address/0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732) |
+| Ethereum Sepolia | SchrodingerBox | [`0x352167e7A42C69401F705005d179d18892D115F2`](https://sepolia.etherscan.io/address/0x352167e7A42C69401F705005d179d18892D115F2) |
+| Ethereum Sepolia | WormholeMailbox | [`0x2e7AE434CDf01DF8453Fb96Ef26c200A0a6087A1`](https://sepolia.etherscan.io/address/0x2e7AE434CDf01DF8453Fb96Ef26c200A0a6087A1) |
+| Base Sepolia | SchrodingerBox | [`0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3`](https://sepolia.basescan.org/address/0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3) |
+| Base Sepolia | WormholeMailbox | [`0x571d5EC9977196eB0594291842711cc615378E53`](https://sepolia.basescan.org/address/0x571d5EC9977196eB0594291842711cc615378E53) |
 
 ## Environments & Deployment
 

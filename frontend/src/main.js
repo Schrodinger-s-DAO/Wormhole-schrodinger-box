@@ -49,6 +49,7 @@ function bind() {
     }
     $("transfer-to").value = state.account;
     $("bridge-to").value = state.account;
+    $("return-to").value = state.account;
   });
   $("btn-max").addEventListener("click", () => {
     $("dep-amount").value = ethers.formatUnits(state.parBalance, 18);

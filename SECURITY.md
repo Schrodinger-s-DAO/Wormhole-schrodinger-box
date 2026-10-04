@@ -25,6 +25,14 @@ Internal review of the contracts in this repository. This is not an external aud
 | T-01 | Owner keys can seize a box that is in transit | High | Mitigated |
 | L-04 | The fee quote fallback breaks the bridge | Low | Fixed |
 | L-05 | A return is not bound to the bridge that locked the box | Low | Fixed |
+| SB-07 | A return delivers the original to `msg.sender` on the origin chain | Medium | Fixed |
+| SB-08 | A shadow held where it cannot be returned locks the original forever | Medium | Accepted risk |
+| SB-09 | Rebasing and blocklist tokens break pooled accounting | Medium | Accepted risk |
+| SB-10 | A box can be deposited into itself | Low | Fixed |
+| SB-11 | Nested boxes are frozen only by an undocumented invariant | Low | Fixed |
+| SB-12 | The seal freezes the asset list, not the value of what is inside | Info | Accepted risk |
+| SB-13 | Deployment addresses disagree between README and deploy files | Info | Fixed |
+| SB-14 | Single-key `Ownable`, manual freeze | Low | Fixed |
 
 ## H-01 — ERC-20 `transferFrom` return value is ignored
 
@@ -168,14 +176,76 @@ A return used to name the original id and pass the peer check. It did not have t
 
 **Fix:** `bridgeBox` stores `messageNonce` on the original, and the shadow keeps that same nonce. Action 2 reverts with `NonceMismatch` unless `boxData.messageNonce` equals the nonce stored on the original. `test/SchrodingerBox.bridge.test.js` delivers a return with a different nonce and checks that the original stays locked.
 
+## SB-07 — A return delivers the original to `msg.sender` on the origin chain
+
+**Severity:** Medium
+
+`returnShadowBox` used to put `msg.sender` in the payload. On the origin chain the original was transferred to that address. A shadow held by a Safe, an ERC-4337 account, or an ERC-6551 account would send the original to the same address on the origin chain. If that account is not deployed there, or is controlled by someone else, the original and everything in it is lost.
+
+**Fix:** `returnShadowBox(uint256 boxId, address receiver)` reverts on the zero address. The payload shape is unchanged; the chosen receiver is what gets written. The frontend defaults to the connected address, warns when that address has code, and asks the user to type it again.
+
+## SB-08 — A shadow held where it cannot be returned locks the original forever
+
+**Severity:** Medium (accepted risk)
+
+Only the holder of the shadow can unlock the original. A shadow minted to a contract with no way to call `returnShadowBox`, to an address with no code on the destination, or to the box contract itself, leaves the original locked with no exit. This follows from H-05: delivery must not revert. There is no timeout that releases the original, because that would let the original and the shadow both be live.
+
+**Mitigation:** `bridgeBox` reverts when the receiver is the trusted box on the destination chain. `returnShadowBox` reverts when the receiver is the trusted box on the origin chain. The frontend asks the user to retype the receiver and warns when the address has code. `test/SchrodingerBox.bridge.test.js` covers both refusals.
+
+## SB-09 — Rebasing and blocklist tokens break pooled accounting
+
+**Severity:** Medium (accepted risk)
+
+All boxes share one contract balance per token. A token whose balance changes after deposit (negative rebase, demurrage) leaves the last withdrawer short. A positive rebase leaves surplus that no box can claim. A token that blocklists the box contract freezes that token in every box.
+
+**Mitigation:** these tokens are unsupported. The deposit form says so and does not block the transaction. An on-chain allowlist, or per-box shares, is a later change and is not in this contract.
+
+## SB-10 — A box can be deposited into itself
+
+**Severity:** Low
+
+`depositNFT(boxId, address(this), boxId)` used to check ownership before the transfer. After it, the contract owned the box and no one could withdraw or unseal it.
+
+**Fix:** `depositNFT` reverts with `SelfDeposit` when `nftContract == address(this) && tokenId == boxId`. Longer cycles are already impossible, because a box inside another has no owner that can act on it. `test/SchrodingerBox.audit-poc.test.js` expects that revert.
+
+## SB-11 — Nested boxes are frozen only by an undocumented invariant
+
+**Severity:** Low
+
+A box inside another box is owned by this contract. Every state-changing entrypoint requires `ownerOf(boxId) == msg.sender`, so the inner box cannot be sealed, unsealed, deposited into, or withdrawn from while it is inside. TradeEscrow relies on this: it checks the seal and the content hash of the outer box.
+
+**Fix:** the invariant is stated in NatSpec on `_requireOpenOriginal` and on `ISealable`. `test/SchrodingerBox.audit-poc.test.js` seals the outer box and checks that the inner box stays unsealed and cannot be unsealed or withdrawn. Any future delegate, operator, or nested-withdraw feature must preserve it.
+
+## SB-12 — The seal freezes the asset list, not the value of what is inside
+
+**Severity:** Info (accepted risk)
+
+The seal blocks deposits and withdrawals. It does not stop changes inside the assets: an ERC-6551 account can be drained through approvals or permits signed before it was deposited; an upgradeable NFT contract's admin can move a token; ERC-4907 keeps its `user` role; rebasing tokens change amount.
+
+**Mitigation:** the deposit form warns, and does not block, when the NFT contract answers `token()` like an ERC-6551 account or has a non-zero EIP-1967 implementation slot. `contentHash` includes a nested `ISealable` hash when that call succeeds, and zero when it does not. A change that never touches the box's own asset list can still leave the hash unchanged.
+
+## SB-13 — Deployment addresses disagree
+
+**Severity:** Info
+
+The README, this file, `frontend/src/live.json`, and `deployed_contracts.json` used to name different box addresses.
+
+**Fix:** one deployment table. The deploy script writes `live.json` and `deployed_contracts.json`, and the README and this file copy that pair. Older boxes are not trusted peers of this pair.
+
+## SB-14 — Single-key `Ownable`, manual freeze
+
+**Severity:** Low
+
+**Fix:** the box and the mailbox use `Ownable2Step`. The deploy script reverts unless `configFrozen()` is true on both boxes and both mailboxes after `freezeConfig`. No multisig address was designated, so the owner is still the deploy key. Ownership can move later with `transferOwnership` and `acceptOwnership`.
+
 ## Deployment
 
 | Chain | Box | Mailbox |
 |-------|-----|---------|
-| Ethereum Sepolia | `0x29733d284ba67EC96D43966C575f26437aF0aF73` | `0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7` |
-| Base Sepolia | `0xbC727Eda544c08395A59A4b5e5865375b955be12` | `0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732` |
+| Ethereum Sepolia | `0x352167e7A42C69401F705005d179d18892D115F2` | `0x2e7AE434CDf01DF8453Fb96Ef26c200A0a6087A1` |
+| Base Sepolia | `0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3` | `0x571d5EC9977196eB0594291842711cc615378E53` |
 
-Sepolia was redeployed on 4 October 2026 from the source in this repository. Base Sepolia is the contract from 3 October 2026 and was not redeployed. The new Sepolia box does not set that Base box as a trusted peer, so the two cannot bridge until Base is deployed again. The explorers do not show a verified source yet. The second network is Base Sepolia.
+Both chains were deployed on 4 October 2026 from the source in this repository. Each box trusts only the other, and `freezeConfig` has been called on both boxes and both mailboxes. The explorers do not show a verified source: this environment has no Etherscan or Basescan API key.
 
 ## Trust model
 
@@ -194,6 +264,7 @@ Sepolia was redeployed on 4 October 2026 from the source in this repository. Bas
 
 ## Rules that have to keep holding
 
+- A box nested inside this contract is owned by this contract. Nobody can deposit, withdraw, seal, or unseal it until it is withdrawn.
 - A shadow cannot deposit or withdraw.
 - A locked original cannot be transferred. Burning it is still allowed.
 - A sealed original cannot deposit or withdraw.
@@ -203,7 +274,7 @@ Sepolia was redeployed on 4 October 2026 from the source in this repository. Bas
 
 ## Notes for integrators
 
-- At settlement, read `isSealed` and `sealState` for any NFT that supports `ISealable`, and check the counter again after the transfers. TradeEscrow does this. A container that does not implement `ISealable` can still be emptied by its owner.
+- At settlement, read `isSealed`, `sealState`, and `contentHash` for any NFT that supports `ISealable`, and check them again after the transfers. TradeEscrow does this. `contentHash` walks the asset list, and for a nested box or another `ISealable` it includes that hash, up to four levels. A container that does not implement `ISealable` can still be emptied by its owner.
 - A shadow is the right to bring the original home. It does not hold the assets. The assets stay on the origin chain.
 - A locked original is owned by the box contract. `transferFrom` of that token reverts.
 
@@ -229,6 +300,9 @@ Use Private vulnerability reporting on this GitHub repository (Settings, Securit
 | L-05 wrong return nonce leaves the original locked | `test/SchrodingerBox.bridge.test.js` |
 | Seal cycle, shadow stays sealed, return bumps the counter | `test/SchrodingerBox.bridge.test.js` |
 | T-01 frozen trusted contract and frozen peer | `test/SchrodingerBox.bridge.test.js`, `test/WormholeMailbox.test.js` |
+| Receiver cannot be the trusted box, and a return rejects the zero address (SB-08) | `test/SchrodingerBox.bridge.test.js` |
+| Self-deposit reverts with SelfDeposit (SB-10) | `test/SchrodingerBox.audit-poc.test.js` |
+| Inner box cannot be touched while nested (SB-11) | `test/SchrodingerBox.audit-poc.test.js` |
 | Mailbox verifies the VAA, the peer, and replay | `test/WormholeMailbox.test.js` |
 
 ## Residual risk

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
@@ -56,7 +57,7 @@ interface IBoxReceiver {
 }
 
 /// @notice Publishes box messages to Wormhole and delivers a verified VAA to one box.
-contract WormholeMailbox is Ownable, ReentrancyGuard {
+contract WormholeMailbox is Ownable2Step, ReentrancyGuard {
     /// @dev Finalized. Guardians sign after the source chain finalizes.
     uint8 public constant CONSISTENCY_LEVEL = 1;
 

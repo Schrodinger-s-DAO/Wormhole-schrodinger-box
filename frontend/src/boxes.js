@@ -289,12 +289,16 @@ export function paintForms() {
   $("fill-tools").hidden = !openMine || sealed;
   $("more-assets").hidden = !openMine || sealed;
   $("form-return").hidden = !shadowMine;
+  if (state.account) {
+    if (!$("bridge-to").value) $("bridge-to").value = state.account;
+    if (!$("return-to").value) $("return-to").value = state.account;
+  }
   $("form-transfer").hidden = !yours;
   const sealForm = $("form-seal");
   if (openMine && item.sealed !== null) {
     sealForm.hidden = false;
     $("seal-hint").textContent = sealed
-      ? "Sealed. Nothing can be added or removed until you open it. Listing it in a trade keeps this seal."
+      ? "Sealed. Nothing can be added or removed until you open it. The seal does not freeze the value of what is inside. Listing it in a trade keeps this seal."
       : "Seal it before you list this box in a trade. A deposit or a withdrawal has to wait until it is open.";
     $("seal-submit").textContent = sealed ? "Unseal" : "Seal this box";
   } else {

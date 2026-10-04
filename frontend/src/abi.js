@@ -24,7 +24,7 @@ export const boxAbi = [
   "function depositNFT(uint256 boxId, address nftContract, uint256 tokenId)",
   "function withdrawNFT(uint256 boxId, address nftContract, uint256 tokenId)",
   "function bridgeBox(uint16 targetChain, address receiver, uint256 boxId) payable",
-  "function returnShadowBox(uint256 boxId) payable",
+  "function returnShadowBox(uint256 boxId, address receiver) payable",
   "function getBoxDetails(uint256 boxId) view returns (tuple(address contractAddress, uint256 tokenId, uint256 amount, uint8 assetType)[] assets, bool isLocked, uint16 originChain, bool isOriginal, uint256 originBoxId)",
   "function getERC20Balance(uint256 boxId, address token) view returns (uint256)",
   "function containsNFT(uint256 boxId, address nftContract, uint256 tokenId) view returns (bool)",

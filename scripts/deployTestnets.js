@@ -246,7 +246,14 @@ async function freeze(contract, label) {
     return;
   }
   await send(contract.runner, `${label} freeze`, (fees) => contract.freezeConfig(fees));
-  console.log(`  ${label} frozen`);
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    if (await contract.configFrozen()) {
+      console.log(`  ${label} frozen`);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error(`${label} did not freeze`);
 }
 
 async function mintPractice(signer, contracts, second) {

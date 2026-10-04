@@ -1,21 +1,21 @@
 {
   "sepolia": {
     "contracts": {
-      "SchrodingerBox": "0x29733d284ba67EC96D43966C575f26437aF0aF73",
-      "FeeCollector": "0xfa99c5bb9151C5654Bd9b75A2091A263DCC8F16B",
+      "SchrodingerBox": "0x352167e7A42C69401F705005d179d18892D115F2",
+      "FeeCollector": "0xee3e65Bee7Da00ae9E9b1c341D7ab7a27d6E519C",
       "ParadoxToken": "0xC3bCabF7DC96220f11EBDd895811448bc029C8b6",
       "SchrodingerCatNFT": "0x37504282F31d230236782472E8A7389ae6aEa8f1",
-      "WormholeMailbox": "0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7",
+      "WormholeMailbox": "0x2e7AE434CDf01DF8453Fb96Ef26c200A0a6087A1",
       "WormholeCore": "0x4a8bc80Ed5a4067f1CCf107057b8270E0cC11A78"
     }
   },
   "base": {
     "contracts": {
-      "SchrodingerBox": "0xbC727Eda544c08395A59A4b5e5865375b955be12",
-      "FeeCollector": "0xd86C197AE57b4b31D5460d508543d1A904F8C30c",
+      "SchrodingerBox": "0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3",
+      "FeeCollector": "0xc282cC54b9f0C7dd4265DeCD10EA45cD6A5A551b",
       "ParadoxToken": "0x5cc4d1A7faeeE5c8517bA34fa5299d06E34E9cb9",
       "SchrodingerCatNFT": "0xE45237949f2DeE32ea271F8C67D01D834E8ef2A3",
-      "WormholeMailbox": "0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732",
+      "WormholeMailbox": "0x571d5EC9977196eB0594291842711cc615378E53",
       "WormholeCore": "0x79A1027a6A159502049F10906D333EC57E95F083"
     }
   }
