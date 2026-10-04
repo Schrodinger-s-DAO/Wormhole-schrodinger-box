@@ -172,10 +172,10 @@ A return used to name the original id and pass the peer check. It did not have t
 
 | Chain | Box | Mailbox |
 |-------|-----|---------|
-| Ethereum Sepolia | `0x4642836001Ab04ebDf65f1780F5FB5E297e33990` | `0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35` |
+| Ethereum Sepolia | `0x29733d284ba67EC96D43966C575f26437aF0aF73` | `0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7` |
 | Base Sepolia | `0xbC727Eda544c08395A59A4b5e5865375b955be12` | `0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732` |
 
-These addresses were deployed on 3 October 2026 from the source in this repository. Peers and trusted contracts are set, the publish fee is 0, and `freezeConfig` has been called on both boxes and both mailboxes. The explorers do not show a verified source yet. The previous pair (`0x826c…Eb61` / `0xe322…332e`) does not include these fixes and is no longer what the site uses. Holesky is not a supported network.
+Sepolia was redeployed on 4 October 2026 from the source in this repository. Base Sepolia is the contract from 3 October 2026 and was not redeployed. The new Sepolia box does not set that Base box as a trusted peer, so the two cannot bridge until Base is deployed again. The explorers do not show a verified source yet. The second network is Base Sepolia.
 
 ## Trust model
 

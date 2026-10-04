@@ -6,14 +6,14 @@ A Schrödinger Box is that binder, made programmable: an NFT that bundles hetero
 
 It earns its name in transit. Value cannot leave the chain it was born on, so when a Box crosses chains the original locks in place and a shadow box appears on the far side, identical down to the last holding. For the length of the crossing two boxes exist: one frozen, one live, the same identity split by the bridge. Exactly one is ever alive, so a Box can never be spent twice. The paradox is the safety property.
 
-The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Holesky and Sepolia, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md).
+The whole challenge is the mental model: making "many assets across many chains" feel like a single thing you can hold. Live on Ethereum Sepolia and Base Sepolia, built over Wormhole. Findings from a review of the box contract, and the fixes, are in [SECURITY.md](SECURITY.md).
 
 ## Schrodinger Box
 
 The Box holds heterogeneous assets (multiple ERC20 tokens and NFTs) and can be transferred between owners or bridged across EVM chains via Wormhole. When bridged, the source box locks and a shadow box with identical state is recreated on the target chain; both exist simultaneously until the bridge resolves, mirroring the Schrödinger paradox.
 
 **Status**
-- Deployed and tested on Holesky and Sepolia testnets.
+- Deployed on Ethereum Sepolia and Base Sepolia.
 - Built with Hardhat, Wormhole Relayer, and a 4-contract architecture: `SchrodingerBox`, `FeeCollector`, `ParadoxToken`, `SchrodingerCatNFT`.
 
 ## Quickstart
@@ -33,7 +33,7 @@ npx hardhat compile
 - Run tests (examples):
 
 ```bash
-npx hardhat test --network holesky
+npx hardhat test --network baseSepolia
 npx hardhat test --network sepolia
 ```
 
@@ -52,12 +52,12 @@ npx hardhat test --network sepolia
 
 ## Deployments
 
-Live testnet pair, deployed 3 October 2026. Peers are set and `freezeConfig` has been called. Source is not verified on the explorers yet. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`.
+Sepolia was redeployed on 4 October 2026. Base Sepolia is the previous contract and was not redeployed. The new Sepolia box does not trust that Base box, so a bridge message cannot be delivered there until Base is deployed again. Source is not verified on the explorers yet. The same addresses are in `frontend/src/live.json` and `deployed_contracts.json`.
 
 | Network | Contract | Address |
 |---------|----------|---------|
-| Ethereum Sepolia | SchrodingerBox | [`0x4642836001Ab04ebDf65f1780F5FB5E297e33990`](https://sepolia.etherscan.io/address/0x4642836001Ab04ebDf65f1780F5FB5E297e33990) |
-| Ethereum Sepolia | WormholeMailbox | [`0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35`](https://sepolia.etherscan.io/address/0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35) |
+| Ethereum Sepolia | SchrodingerBox | [`0x29733d284ba67EC96D43966C575f26437aF0aF73`](https://sepolia.etherscan.io/address/0x29733d284ba67EC96D43966C575f26437aF0aF73) |
+| Ethereum Sepolia | WormholeMailbox | [`0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7`](https://sepolia.etherscan.io/address/0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7) |
 | Base Sepolia | SchrodingerBox | [`0xbC727Eda544c08395A59A4b5e5865375b955be12`](https://sepolia.basescan.org/address/0xbC727Eda544c08395A59A4b5e5865375b955be12) |
 | Base Sepolia | WormholeMailbox | [`0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732`](https://sepolia.basescan.org/address/0xA6beA0b56D53dCAB242AAf6d6E1ACa961dFe6732) |
 

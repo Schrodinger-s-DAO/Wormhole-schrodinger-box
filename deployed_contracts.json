@@ -1,11 +1,11 @@
 {
   "sepolia": {
     "contracts": {
-      "SchrodingerBox": "0x4642836001Ab04ebDf65f1780F5FB5E297e33990",
-      "FeeCollector": "0x3B76eF42659f322d9A0E76819E4b631673842aF9",
+      "SchrodingerBox": "0x29733d284ba67EC96D43966C575f26437aF0aF73",
+      "FeeCollector": "0xfa99c5bb9151C5654Bd9b75A2091A263DCC8F16B",
       "ParadoxToken": "0xC3bCabF7DC96220f11EBDd895811448bc029C8b6",
       "SchrodingerCatNFT": "0x37504282F31d230236782472E8A7389ae6aEa8f1",
-      "WormholeMailbox": "0x537DF7a9D17CA3EC59bA99291b099824Bc96fB35",
+      "WormholeMailbox": "0xF337fF38cA04F0B0f4fC24268a7B5b920641f7d7",
       "WormholeCore": "0x4a8bc80Ed5a4067f1CCf107057b8270E0cC11A78"
     }
   },

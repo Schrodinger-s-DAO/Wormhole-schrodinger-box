@@ -56,20 +56,19 @@ describe("Fixed Schrodinger Box Bridge Test", function () {
       console.log(`Owner: ${owner}`);
       
       const details = await schrodingerBox.getBoxDetails(boxId);
-      console.log(`Locked: ${details[4]}`);
-      console.log(`Origin Chain: ${details[5]}`);
-      console.log(`Is Original: ${details[6]}`);
-      
-      // ERC20 tokens
-      console.log(`ERC20 Tokens: ${details[0].length}`);
-      for (let i = 0; i < details[0].length; i++) {
-        console.log(`  Token ${i}: ${details[0][i]} - Amount: ${ethers.formatEther(details[1][i])} tokens`);
+      console.log(`Locked: ${details.isLocked}`);
+      console.log(`Origin Chain: ${details.originChain}`);
+      console.log(`Is Original: ${details.isOriginal}`);
+
+      const tokens = details.assets.filter((asset) => Number(asset.assetType) === 0);
+      const nfts = details.assets.filter((asset) => Number(asset.assetType) === 1);
+      console.log(`ERC20 Tokens: ${tokens.length}`);
+      for (let i = 0; i < tokens.length; i++) {
+        console.log(`  Token ${i}: ${tokens[i].contractAddress} - Amount: ${ethers.formatEther(tokens[i].amount)} tokens`);
       }
-      
-      // NFTs
-      console.log(`NFTs: ${details[2].length}`);
-      for (let i = 0; i < details[2].length; i++) {
-        console.log(`  NFT ${i}: Contract ${details[2][i]} - Token ID: ${details[3][i].toString()}`);
+      console.log(`NFTs: ${nfts.length}`);
+      for (let i = 0; i < nfts.length; i++) {
+        console.log(`  NFT ${i}: Contract ${nfts[i].contractAddress} - Token ID: ${nfts[i].tokenId.toString()}`);
       }
     } catch (e) {
       console.log(`Failed to get box details: ${e.message}`);
@@ -423,8 +422,8 @@ describe("Fixed Schrodinger Box Bridge Test", function () {
     
     // Verify box isn't locked
     const boxBefore = await schrodingerBox.getBoxDetails(boxId);
-    console.log("Box locked status before bridging:", boxBefore[4]);
-    expect(boxBefore[4]).to.be.false;
+    console.log("Box locked status before bridging:", boxBefore.isLocked);
+    expect(boxBefore.isLocked).to.be.false;
     
     // Make sure we have tokens in the box
     const tokensInBox = await schrodingerBox.getERC20Balance(boxId, await paradoxToken.getAddress());
@@ -529,8 +528,8 @@ describe("Fixed Schrodinger Box Bridge Test", function () {
       
       // Verify box is now locked
       const boxAfter = await schrodingerBox.getBoxDetails(boxId);
-      console.log("Box locked status after bridging:", boxAfter[4]);
-      expect(boxAfter[4]).to.be.true;
+    console.log("Box locked status after bridging:", boxAfter.isLocked);
+    expect(boxAfter.isLocked).to.be.true;
       
       console.log("Box successfully bridged!");
       

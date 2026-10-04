@@ -69,20 +69,19 @@ describe("📦 SCHRODINGER BOX DEMO", function () {
       console.log(`👤 Proprietario: ${proprietario}`);
       
       const dettagli = await schrodingerBox.getBoxDetails(boxId);
-      console.log(`🔒 Bloccata: ${dettagli[4] ? 'Sì' : 'No'}`);
-      console.log(`⛓️ Chain di origine: ${dettagli[5]}`);
-      console.log(`🌟 Originale: ${dettagli[6] ? 'Sì' : 'No'}`);
-      
-      // Token ERC20
-      console.log(`🪙 Token ERC20: ${dettagli[0].length}`);
-      for (let i = 0; i < dettagli[0].length; i++) {
-        console.log(`  • Token ${i}: ${dettagli[0][i]} - Quantità: ${ethers.formatEther(dettagli[1][i])} PAR`);
+      console.log(`🔒 Bloccata: ${dettagli.isLocked ? 'Sì' : 'No'}`);
+      console.log(`⛓️ Chain di origine: ${dettagli.originChain}`);
+      console.log(`🌟 Originale: ${dettagli.isOriginal ? 'Sì' : 'No'}`);
+
+      const token = dettagli.assets.filter((asset) => Number(asset.assetType) === 0);
+      const nft = dettagli.assets.filter((asset) => Number(asset.assetType) === 1);
+      console.log(`🪙 Token ERC20: ${token.length}`);
+      for (let i = 0; i < token.length; i++) {
+        console.log(`  • Token ${i}: ${token[i].contractAddress} - Quantità: ${ethers.formatEther(token[i].amount)} PAR`);
       }
-      
-      // NFT
-      console.log(`😺 NFT: ${dettagli[2].length}`);
-      for (let i = 0; i < dettagli[2].length; i++) {
-        console.log(`  • NFT ${i}: Contratto ${dettagli[2][i]} - ID: ${dettagli[3][i].toString()}`);
+      console.log(`😺 NFT: ${nft.length}`);
+      for (let i = 0; i < nft.length; i++) {
+        console.log(`  • NFT ${i}: Contratto ${nft[i].contractAddress} - ID: ${nft[i].tokenId.toString()}`);
       }
     } catch (e) {
       console.log(`❌ Errore nel leggere i dettagli della scatola: ${e.message}`);
@@ -305,9 +304,10 @@ describe("📦 SCHRODINGER BOX DEMO", function () {
     
     // Otteniamo i dettagli della scatola
     const dettagliScatola = await schrodingerBox.getBoxDetails(boxId);
-    console.log("📊 La scatola ha", dettagliScatola[2].length, "NFT inizialmente");
+    const nftInScatola = dettagliScatola.assets.filter((asset) => Number(asset.assetType) === 1);
+    console.log("📊 La scatola ha", nftInScatola.length, "NFT inizialmente");
     
-    if (dettagliScatola[2].length > 0) {
+    if (nftInScatola.length > 0) {
       console.log("ℹ️ La scatola ha già degli NFT, salto il deposito");
       return;
     }
@@ -567,17 +567,18 @@ describe("📦 SCHRODINGER BOX DEMO", function () {
     
     // Controlliamo se la scatola ha NFT
     const dettagliScatola = await scatolaDestinatario.getBoxDetails(boxId);
-    console.log("📊 La scatola ha", dettagliScatola[2].length, "NFT");
+    const nftInScatola = dettagliScatola.assets.filter((asset) => Number(asset.assetType) === 1);
+    console.log("📊 La scatola ha", nftInScatola.length, "NFT");
     
-    if (dettagliScatola[2].length == 0) {
+    if (nftInScatola.length == 0) {
       console.log("⚠️ La scatola non ha NFT da prelevare, salto");
       this.skip();
       return;
     }
     
     // Otteniamo i dettagli dell'NFT dalla scatola
-    const nftContract = dettagliScatola[2][0];
-    const nftId = dettagliScatola[3][0];
+    const nftContract = nftInScatola[0].contractAddress;
+    const nftId = nftInScatola[0].tokenId;
     console.log("📝 La scatola contiene NFT #", nftId.toString(), "dal contratto", nftContract);
     
     // Otteniamo il bilancio iniziale NFT del destinatario

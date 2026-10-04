@@ -317,6 +317,13 @@ async function main() {
   console.log(`sepolia core fee ${fee}`);
 
   const sepolia = await deployChain(CHAINS.sepolia, sepoliaWallet);
+  if (process.env.SEPOLIA_ONLY === "1") {
+    console.log("practice assets on sepolia");
+    await mintPractice(sepoliaWallet, sepolia, second);
+    console.log("sepolia only; base and the trusted peer are unchanged");
+    console.log(JSON.stringify(readLive(), null, 2));
+    return;
+  }
   await bridgeEth(sepoliaWallet);
   const base = await deployChain(CHAINS.base, baseWallet);
   await wire(sepoliaWallet, baseWallet, sepolia, base);

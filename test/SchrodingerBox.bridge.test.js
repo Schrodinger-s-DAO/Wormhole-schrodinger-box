@@ -185,11 +185,11 @@ describe("SchrodingerBox bridge", function () {
 
     const stored = await origin.boxes(originBoxId);
     const payload = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint8", "uint256", "tuple(address[],uint256[],address[],uint256[],bool,uint16,bool,uint256,bytes32,uint256)", "address", "bytes32"],
+      ["uint8", "uint256", "tuple(tuple(address,uint256,uint256,uint8)[],bool,uint16,bool,uint256,bytes32,uint256)", "address", "bytes32"],
       [
         2,
         originBoxId,
-        [[], [], [], [], false, ORIGIN_CHAIN, false, 0, ethers.id("wrong"), originBoxId],
+        [[], false, ORIGIN_CHAIN, false, 0, ethers.id("wrong"), originBoxId],
         alice.address,
         ethers.id("return")
       ]

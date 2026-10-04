@@ -65,20 +65,19 @@ describe("Schrodinger Box Detailed Test", function () {
       console.log(`Owner: ${owner}`);
       
       const details = await schrodingerBox.getBoxDetails(boxId);
-      console.log(`Locked: ${details[4]}`);
-      console.log(`Origin Chain: ${details[5]}`);
-      console.log(`Is Original: ${details[6]}`);
-      
-      // ERC20 tokens
-      console.log(`ERC20 Tokens: ${details[0].length}`);
-      for (let i = 0; i < details[0].length; i++) {
-        console.log(`  Token ${i}: ${details[0][i]} - Amount: ${ethers.formatEther(details[1][i])} tokens`);
+      console.log(`Locked: ${details.isLocked}`);
+      console.log(`Origin Chain: ${details.originChain}`);
+      console.log(`Is Original: ${details.isOriginal}`);
+
+      const tokens = details.assets.filter((asset) => Number(asset.assetType) === 0);
+      const nfts = details.assets.filter((asset) => Number(asset.assetType) === 1);
+      console.log(`ERC20 Tokens: ${tokens.length}`);
+      for (let i = 0; i < tokens.length; i++) {
+        console.log(`  Token ${i}: ${tokens[i].contractAddress} - Amount: ${ethers.formatEther(tokens[i].amount)} tokens`);
       }
-      
-      // NFTs
-      console.log(`NFTs: ${details[2].length}`);
-      for (let i = 0; i < details[2].length; i++) {
-        console.log(`  NFT ${i}: Contract ${details[2][i]} - Token ID: ${details[3][i].toString()}`);
+      console.log(`NFTs: ${nfts.length}`);
+      for (let i = 0; i < nfts.length; i++) {
+        console.log(`  NFT ${i}: Contract ${nfts[i].contractAddress} - Token ID: ${nfts[i].tokenId.toString()}`);
       }
     } catch (e) {
       console.log(`Failed to get box details: ${e.message}`);
@@ -324,9 +323,10 @@ describe("Schrodinger Box Detailed Test", function () {
     
     // Get box details
     const boxDetails = await schrodingerBox.getBoxDetails(boxId);
-    console.log("Box has", boxDetails[2].length, "NFTs initially");
+    const listedNfts = boxDetails.assets.filter((asset) => Number(asset.assetType) === 1);
+    console.log("Box has", listedNfts.length, "NFTs initially");
     
-    if (boxDetails[2].length > 0) {
+    if (listedNfts.length > 0) {
       console.log("Box already has NFTs, skipping deposit");
       return;
     }
@@ -633,17 +633,18 @@ describe("Schrodinger Box Detailed Test", function () {
     
     // Check if box has NFTs
     const boxDetails = await recipientBox.getBoxDetails(boxId);
-    console.log("Box has", boxDetails[2].length, "NFTs");
+    const listedNfts = boxDetails.assets.filter((asset) => Number(asset.assetType) === 1);
+    console.log("Box has", listedNfts.length, "NFTs");
     
-    if (boxDetails[2].length == 0) {
+    if (listedNfts.length == 0) {
       console.log("Box has no NFTs to withdraw, skipping");
       this.skip();
       return;
     }
     
     // Get the NFT details from the box
-    const nftContract = boxDetails[2][0];
-    const nftId = boxDetails[3][0];
+    const nftContract = listedNfts[0].contractAddress;
+    const nftId = listedNfts[0].tokenId;
     console.log("Box contains NFT #", nftId.toString(), "from contract", nftContract);
     
     // Get recipient's initial NFT balance
