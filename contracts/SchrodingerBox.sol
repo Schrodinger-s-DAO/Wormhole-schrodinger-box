@@ -688,11 +688,11 @@ contract SchrodingerBox is ERC721Enumerable, Ownable2Step, ReentrancyGuard, IWor
     }
 
     function _externalContentHash(address nft, uint256 tokenId) internal view returns (bytes32) {
-        (bool supported, bytes memory data) = nft.staticcall(
+        (bool supported, bytes memory data) = nft.staticcall{gas: 50_000}(
             abi.encodeCall(IERC165.supportsInterface, (type(ISealable).interfaceId))
         );
         if (!supported || data.length < 32 || !abi.decode(data, (bool))) return bytes32(0);
-        (bool hashed, bytes memory hashData) = nft.staticcall(
+        (bool hashed, bytes memory hashData) = nft.staticcall{gas: 50_000}(
             abi.encodeCall(ISealable.contentHash, (tokenId))
         );
         if (!hashed || hashData.length < 32) return bytes32(0);

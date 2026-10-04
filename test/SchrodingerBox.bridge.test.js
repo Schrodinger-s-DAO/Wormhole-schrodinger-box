@@ -228,6 +228,16 @@ describe("SchrodingerBox bridge", function () {
     expect(await origin.isSealed(originBoxId)).to.equal(true);
   });
 
+  it("gives the original to the receiver named on the return", async function () {
+    const { alice, bob, relayer, origin, dest } = await deployPair();
+    const originBoxId = await mintBox(origin, alice);
+    const shadowId = await bridge(relayer, origin, dest, alice, originBoxId, alice.address);
+    await dest.connect(alice).returnShadowBox(shadowId, bob.address);
+    await relayer.deliver(await origin.getAddress(), DEST_CHAIN, asBytes32(await dest.getAddress()));
+    expect(await origin.ownerOf(originBoxId)).to.equal(bob.address);
+    await expect(dest.ownerOf(shadowId)).to.be.reverted;
+  });
+
   it("refuses to deliver a box to the trusted box contract", async function () {
     const { alice, relayer, origin, dest } = await deployPair();
     const originBoxId = await mintBox(origin, alice);

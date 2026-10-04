@@ -32,7 +32,7 @@ Internal review of the contracts in this repository. This is not an external aud
 | SB-11 | Nested boxes are frozen only by an undocumented invariant | Low | Fixed |
 | SB-12 | The seal freezes the asset list, not the value of what is inside | Info | Accepted risk |
 | SB-13 | Deployment addresses disagree between README and deploy files | Info | Fixed |
-| SB-14 | Single-key `Ownable`, manual freeze | Low | Fixed |
+| SB-14 | Single-key `Ownable`, manual freeze | Low | Mitigated |
 
 ## H-01 — ERC-20 `transferFrom` return value is ignored
 
@@ -236,16 +236,32 @@ The README, this file, `frontend/src/live.json`, and `deployed_contracts.json` u
 
 **Severity:** Low
 
-**Fix:** the box and the mailbox use `Ownable2Step`. The deploy script reverts unless `configFrozen()` is true on both boxes and both mailboxes after `freezeConfig`. No multisig address was designated, so the owner is still the deploy key. Ownership can move later with `transferOwnership` and `acceptOwnership`.
+**Status:** Mitigated
+
+The box and the mailbox use `Ownable2Step`. The deploy script reverts unless `configFrozen()` is true on both boxes and both mailboxes after `freezeConfig`. No multisig address was designated, so the owner is still the deploy key. That key stays until a deploy that is not a testnet. Ownership can move later with `transferOwnership` and `acceptOwnership`.
+
+External `contentHash` reads use a 50,000 gas `staticcall`. A nested contract that needs more gas contributes a zero hash instead of consuming the caller's stipend.
 
 ## Deployment
 
 | Chain | Box | Mailbox |
 |-------|-----|---------|
-| Ethereum Sepolia | `0x352167e7A42C69401F705005d179d18892D115F2` | `0x2e7AE434CDf01DF8453Fb96Ef26c200A0a6087A1` |
-| Base Sepolia | `0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3` | `0x571d5EC9977196eB0594291842711cc615378E53` |
+| Ethereum Sepolia | `0xe8De9D30ae05f176b5970559ad961958A5447831` | `0xA9c8e691c70163747D89E05CcA9DC0169a45cDbb` |
+| Base Sepolia | `0x53C3fAa5029a7FfD23DaAA737C8E6524992fe9Ee` | `0x913c8c642B62CcC88d694F15fEF13Ca8a40c563D` |
 
 Both chains were deployed on 4 October 2026 from the source in this repository. Each box trusts only the other, and `freezeConfig` has been called on both boxes and both mailboxes. The explorers do not show a verified source: this environment has no Etherscan or Basescan API key.
+
+## Previous deployments
+
+These boxes are still on chain. They are not peers of the pair above. An escrow that only understands the current `ISealable` id rejects the ones from before `contentHash`.
+
+| Chain | Box | What it lacks |
+|-------|-----|----------------|
+| Ethereum Sepolia | `0x4642836001Ab04ebDf65f1780F5FB5E297e33990` | No `contentHash`. Not protected. |
+| Ethereum Sepolia | `0x29733d284ba67EC96D43966C575f26437aF0aF73` | No `contentHash`. Not protected. |
+| Base Sepolia | `0xbC727Eda544c08395A59A4b5e5865375b955be12` | No `contentHash`. Not protected. |
+| Ethereum Sepolia | `0x352167e7A42C69401F705005d179d18892D115F2` | Has `contentHash`. External hash reads have no gas cap. |
+| Base Sepolia | `0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3` | Has `contentHash`. External hash reads have no gas cap. |
 
 ## Trust model
 
