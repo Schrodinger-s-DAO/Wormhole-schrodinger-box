@@ -222,7 +222,7 @@ A box inside another box is owned by this contract. Every state-changing entrypo
 
 The seal blocks deposits and withdrawals. It does not stop changes inside the assets: an ERC-6551 account can be drained through approvals or permits signed before it was deposited; an upgradeable NFT contract's admin can move a token; ERC-4907 keeps its `user` role; rebasing tokens change amount.
 
-**Mitigation:** the deposit form warns, and does not block, when the NFT contract answers `token()` like an ERC-6551 account or has a non-zero EIP-1967 implementation slot. `contentHash` includes a nested `ISealable` hash when that call succeeds, and zero when it does not. A change that never touches the box's own asset list can still leave the hash unchanged.
+**Mitigation:** the deposit form warns, and does not block, when the NFT contract answers `token()` like an ERC-6551 account or has a non-zero EIP-1967 implementation slot. `seal` stores `contentHash`. While the box is sealed that function returns the stored word, then re-reads at most eight external `ISealable` contracts. A contract that claims the interface but does not return a hash makes `seal` revert `ExternalHashFailed`, so those contents are not dropped from the hash. A contract that does not claim the interface still contributes zero. A change that never touches the box's own asset list can still leave the hash unchanged when it is not one of those eight reads.
 
 ## SB-13 — Deployment addresses disagree
 
@@ -240,16 +240,16 @@ The README, this file, `frontend/src/live.json`, and `deployed_contracts.json` u
 
 The box and the mailbox use `Ownable2Step`. The deploy script reverts unless `configFrozen()` is true on both boxes and both mailboxes after `freezeConfig`. No multisig address was designated, so the owner is still the deploy key. That key stays until a deploy that is not a testnet. Ownership can move later with `transferOwnership` and `acceptOwnership`.
 
-External `contentHash` reads use a 50,000 gas `staticcall`. A nested contract that needs more gas contributes a zero hash instead of consuming the caller's stipend.
+External `contentHash` reads use a 50,000 gas `staticcall`. A contract that claims `ISealable` and does not return inside that cap makes `seal` revert `ExternalHashFailed`. It does not contribute a zero hash.
 
 ## Deployment
 
 | Chain | Box | Mailbox |
 |-------|-----|---------|
-| Ethereum Sepolia | `0xe8De9D30ae05f176b5970559ad961958A5447831` | `0xA9c8e691c70163747D89E05CcA9DC0169a45cDbb` |
-| Base Sepolia | `0x53C3fAa5029a7FfD23DaAA737C8E6524992fe9Ee` | `0x913c8c642B62CcC88d694F15fEF13Ca8a40c563D` |
+| Ethereum Sepolia | `0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9` | `0x03a41E5f28e05C469761dD42216B1E12F2C00b32` |
+| Base Sepolia | `0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2` | `0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b` |
 
-Both chains were deployed on 4 October 2026 from the source in this repository. Each box trusts only the other, and `freezeConfig` has been called on both boxes and both mailboxes. The explorers do not show a verified source: this environment has no Etherscan or Basescan API key.
+Both chains were deployed on 4 October 2026 from the source in this repository. Each box trusts only the other, and `freezeConfig` has been called on both boxes and both mailboxes. `seal` stores `contentHash`. The explorers do not show a verified source: this environment has no Etherscan or Basescan API key.
 
 ## Previous deployments
 
@@ -262,6 +262,8 @@ These boxes are still on chain. They are not peers of the pair above. An escrow 
 | Base Sepolia | `0xbC727Eda544c08395A59A4b5e5865375b955be12` | No `contentHash`. Not protected. |
 | Ethereum Sepolia | `0x352167e7A42C69401F705005d179d18892D115F2` | Has `contentHash`. External hash reads have no gas cap. |
 | Base Sepolia | `0xcd2fD8153B15b37dE54B10eD522F3a25cB9b56a3` | Has `contentHash`. External hash reads have no gas cap. |
+| Ethereum Sepolia | `0xe8De9D30ae05f176b5970559ad961958A5447831` | Computes `contentHash` on every read. An external hash that runs out of gas becomes zero. |
+| Base Sepolia | `0x53C3fAa5029a7FfD23DaAA737C8E6524992fe9Ee` | Computes `contentHash` on every read. An external hash that runs out of gas becomes zero. |
 
 ## Trust model
 
@@ -290,7 +292,7 @@ These boxes are still on chain. They are not peers of the pair above. An escrow 
 
 ## Notes for integrators
 
-- At settlement, read `isSealed`, `sealState`, and `contentHash` for any NFT that supports `ISealable`, and check them again after the transfers. TradeEscrow does this. `contentHash` walks the asset list, and for a nested box or another `ISealable` it includes that hash, up to four levels. A container that does not implement `ISealable` can still be emptied by its owner.
+- At settlement, read `isSealed`, `sealState`, and `contentHash` for any NFT that supports `ISealable`, and check them again after the transfers. TradeEscrow does this. On a sealed box, `contentHash` is the word stored by `seal`, plus at most eight live reads of external containers. Nested boxes of this contract are included when the outer box is sealed, up to four levels, and they are not walked again on the later read. A container that does not implement `ISealable` can still be emptied by its owner.
 - A shadow is the right to bring the original home. It does not hold the assets. The assets stay on the origin chain.
 - A locked original is owned by the box contract. `transferFrom` of that token reverts.
 
@@ -319,6 +321,8 @@ Use Private vulnerability reporting on this GitHub repository (Settings, Securit
 | Receiver cannot be the trusted box, and a return rejects the zero address (SB-08) | `test/SchrodingerBox.bridge.test.js` |
 | Self-deposit reverts with SelfDeposit (SB-10) | `test/SchrodingerBox.audit-poc.test.js` |
 | Inner box cannot be touched while nested (SB-11) | `test/SchrodingerBox.audit-poc.test.js` |
+| A full box and a four-level nest stay under 50_000 gas once sealed | `test/SchrodingerBox.content-hash.test.js` |
+| An external hash that does not return reverts the seal | `test/SchrodingerBox.content-hash.test.js` |
 | Mailbox verifies the VAA, the peer, and replay | `test/WormholeMailbox.test.js` |
 
 ## Residual risk

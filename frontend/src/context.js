@@ -36,6 +36,8 @@ export const ERRORS = {
   NotSealed: "This box is already open",
   NonceMismatch: "This return is not the bridge that locked the box",
   ConfigFrozen: "That configuration is frozen",
+  ExternalHashFailed: "A container in this box did not return its content hash",
+  TooManyExternalSeals: "This box nests more than 8 containers that report a content hash",
   OwnableUnauthorizedAccount: "Only the owner can do that",
   ERC721InsufficientApproval: "Approve the NFT first",
   ERC20InsufficientAllowance: "Approve the token first",

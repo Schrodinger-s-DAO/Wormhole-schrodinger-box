@@ -56,10 +56,10 @@ Both chains were deployed on 4 October 2026 and each box trusts only the other. 
 
 | Network | Contract | Address |
 |---------|----------|---------|
-| Ethereum Sepolia | SchrodingerBox | [`0xe8De9D30ae05f176b5970559ad961958A5447831`](https://sepolia.etherscan.io/address/0xe8De9D30ae05f176b5970559ad961958A5447831) |
-| Ethereum Sepolia | WormholeMailbox | [`0xA9c8e691c70163747D89E05CcA9DC0169a45cDbb`](https://sepolia.etherscan.io/address/0xA9c8e691c70163747D89E05CcA9DC0169a45cDbb) |
-| Base Sepolia | SchrodingerBox | [`0x53C3fAa5029a7FfD23DaAA737C8E6524992fe9Ee`](https://sepolia.basescan.org/address/0x53C3fAa5029a7FfD23DaAA737C8E6524992fe9Ee) |
-| Base Sepolia | WormholeMailbox | [`0x913c8c642B62CcC88d694F15fEF13Ca8a40c563D`](https://sepolia.basescan.org/address/0x913c8c642B62CcC88d694F15fEF13Ca8a40c563D) |
+| Ethereum Sepolia | SchrodingerBox | [`0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9`](https://sepolia.etherscan.io/address/0x0D0aD3b2698ab55217fFb7428A8bE7Ac8e8041f9) |
+| Ethereum Sepolia | WormholeMailbox | [`0x03a41E5f28e05C469761dD42216B1E12F2C00b32`](https://sepolia.etherscan.io/address/0x03a41E5f28e05C469761dD42216B1E12F2C00b32) |
+| Base Sepolia | SchrodingerBox | [`0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2`](https://sepolia.basescan.org/address/0x7c44c66c7F93Fa84dDeCd747E427fe3E4818cCE2) |
+| Base Sepolia | WormholeMailbox | [`0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b`](https://sepolia.basescan.org/address/0x8a9Be83e244Bf9DCbdAF67EFcB95C95130A4266b) |
 
 ## Environments & Deployment
 

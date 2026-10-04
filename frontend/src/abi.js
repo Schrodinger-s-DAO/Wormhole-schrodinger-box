@@ -90,6 +90,8 @@ export const boxAbi = [
   "error AlreadySealed()",
   "error NotSealed()",
   "error NonceMismatch()",
+  "error ExternalHashFailed()",
+  "error TooManyExternalSeals()",
   "error ConfigFrozen()",
   "error ReentrancyGuardReentrantCall()",
   ...ownableErrors,
